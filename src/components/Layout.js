@@ -27,6 +27,7 @@ import {
   History,
   Person,
   Logout,
+  Receipt,
   Settings
 } from '@mui/icons-material';
 // RIGHT ✅
@@ -67,6 +68,7 @@ const Layout = () => {
     { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
     { text: 'Transaction History', icon: <History />, path: '/history' },
     { text: 'Profile', icon: <Person />, path: '/profile' },
+    ...(user && user.department === 'Finance' && user.role === 'Core' ? [{ text: 'Vendor Management', icon: <Receipt />, path: '/vendor-management' }]: [])
   ];
 
   const drawer = (

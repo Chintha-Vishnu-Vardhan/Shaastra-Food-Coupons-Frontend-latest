@@ -12,6 +12,7 @@ import ForgotPasswordPage from './components/ForgotPasswordPage';
 import DashboardPage from './components/DashboardPage';
 import HistoryPage from './components/HistoryPage';
 import ProfilePage from './components/ProfilePage';
+import VendorManagement from './components/VendorManagement';
 
 // Create a context that our components can use to get the theme toggle function
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
@@ -312,6 +313,7 @@ function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/history" element={<HistoryPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/vendor-management" element={<VendorManagement />} />
               </Route>
             </Route>
             {/* Optional: Add a 404 Not Found route */}
