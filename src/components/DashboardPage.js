@@ -1,14 +1,15 @@
 // src/components/DashboardPage.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Box, Card, Typography, Button, TextField, Container, CircularProgress,
     Modal, List, ListItem, ListItemText, Divider, Paper,
     Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel, Grid,
-    IconButton, Snackbar,
-    InputAdornment
+    InputAdornment,IconButton
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { io } from 'socket.io-client';
+import { useSnackbar } from 'notistack';
 import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
@@ -16,38 +17,43 @@ import AddCardIcon from '@mui/icons-material/AddCard';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import CloseIcon from '@mui/icons-material/Close';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import QRCode from 'react-qr-code';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-
-const MIN_ANIMATION_TIME = 1500; // milliseconds
+// ✅ NEW IMPORT
+import TransactionStatus from './TransactionStatus';
 
 // Responsive Modal Style
 const modalStyle = {
-  position: 'absolute',
-  top: '50%',
-  left: '50%',
-  transform: 'translate(-50%, -50%)',
-  width: { xs: '90%', sm: 400 },
-  maxHeight: '90vh',
-  bgcolor: 'background.paper',
-  borderRadius: 4,
-  boxShadow: 24,
-  p: 4,
-  textAlign: 'center',
-  overflowY: 'auto'
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: { xs: '90%', sm: 400 },
+    maxHeight: '90vh',
+    bgcolor: 'background.paper',
+    borderRadius: 4,
+    boxShadow: 24,
+    p: 4,
+    textAlign: 'center',
+    overflowY: 'auto'
 };
 
 const DashboardPage = () => {
     const { user, logout } = useAuth();
+    const { enqueueSnackbar } = useSnackbar(); 
+
     const [transactions, setTransactions] = useState([]);
     const [message, setMessage] = useState('');
-    const [isSending, setIsSending] = useState(false);
     const [idModalOpen, setIdModalOpen] = useState(false);
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
+
+    // ✅ NEW STATE: Controls the entire transaction animation flow
+    // Values: 'input', 'processing', 'success', 'error'
+    const [transactionStatus, setTransactionStatus] = useState('input');
+
+    const socketRef = useRef();
 
     // Page Title component
     const PageTitle = () => (
@@ -109,25 +115,30 @@ const DashboardPage = () => {
         setGroupOpen(false); setMessage(''); setTargetRole('');
         setGroupMembers([]); setRecipients({}); setCommonAmount('');
     };
+
     const handlePinModalClose = () => {
-        if (isSending) return;
+        // Prevent closing while processing or showing success animation
+        if (transactionStatus === 'processing' || transactionStatus === 'success') return;
+        
         setIsPinModalOpen(false);
         setMessage('');
         setSPin('');
         setPendingTransaction(null);
         setShowSPin(false);
+        setTransactionStatus('input'); // Reset status
     }
 
     const handleIdClose = () => setIdModalOpen(false);
+    
     const handleCopyId = async () => {
         try {
             await navigator.clipboard.writeText(user.rollNumber || user.userId || '');
-            setSnackbarOpen(true);
+            enqueueSnackbar('User ID copied to clipboard!', { variant: 'info' });
         } catch (err) {
             console.error('Copy failed', err);
+            enqueueSnackbar('Failed to copy ID', { variant: 'error' });
         }
     };
-    const handleSnackbarClose = () => setSnackbarOpen(false);
 
     const handleClickShowSPin = () => setShowSPin((show) => !show);
     const handleMouseDownSPin = (event) => {
@@ -147,6 +158,43 @@ const DashboardPage = () => {
         fetchHistory();
     }, [fetchHistory]);
 
+    // --- REAL-TIME SOCKET LISTENER ---
+    useEffect(() => {
+        if (!user) return;
+
+        socketRef.current = io("http://localhost:5000");
+        socketRef.current.emit("join_room", user.userId);
+
+        socketRef.current.on("transaction_received", (data) => {
+            console.log("Real-time notification received:", data);
+            const audio = new Audio('https://codeskulptor-demos.commondatastorage.googleapis.com/pang/pop.mp3'); 
+            audio.play().catch(e => console.log("Audio play failed", e));
+
+            enqueueSnackbar(`💰 Received ₹${data.amount} from ${data.senderName}!`, { 
+                variant: 'success', 
+                autoHideDuration: 5000,
+                style: { fontSize: '1rem', fontWeight: 600 }
+            });
+
+            setTransactions(prev => [
+                {
+                    id: data.id, 
+                    senderUserId: "incoming_live", 
+                    receiverUserId: user.userId, 
+                    senderName: data.senderName,
+                    receiverName: user.name,
+                    amount: data.amount,
+                    createdAt: data.createdAt
+                },
+                ...prev
+            ]);
+        });
+
+        return () => {
+            if (socketRef.current) socketRef.current.disconnect();
+        };
+    }, [user, enqueueSnackbar]);
+
     useEffect(() => {
         if (groupOpen && targetRole) {
             const fetchDeptMembersByRole = async () => {
@@ -161,7 +209,6 @@ const DashboardPage = () => {
                     }, {});
                     setRecipients(initialRecipients);
                 } catch (err) {
-                    console.error("Failed to fetch department members:", err);
                     setMessage(err.response?.data?.message || 'Error fetching members.');
                 }
             };
@@ -171,7 +218,6 @@ const DashboardPage = () => {
         }
     }, [groupOpen, targetRole]);
 
-    // Event Handlers
     const handleRecipientToggle = (userId) => {
         setRecipients(prev => ({
             ...prev,
@@ -205,43 +251,28 @@ const DashboardPage = () => {
         setMessage('');
     };
 
-    // ✅ FIXED: QR Scan Handler - Updated to handle multiple result formats and check for self-scan
     const handleScanResult = (result) => {
         try {
             let scannedData = null;
-            
-            // Handle different result formats from the scanner library
-            if (typeof result === 'string') {
-                scannedData = result;
-            } else if (result?.data) {
-                scannedData = result.data;
-            } else if (result?.text) {
-                scannedData = result.text;
-            } else if (result?.rawValue) {
-                scannedData = result.rawValue;
-            } else if (Array.isArray(result) && result.length > 0) {
-                scannedData = result[0]?.rawValue || result[0]?.data || result[0];
-            }
+            if (typeof result === 'string') scannedData = result;
+            else if (result?.data) scannedData = result.data;
+            else if (result?.text) scannedData = result.text;
+            else if (result?.rawValue) scannedData = result.rawValue;
+            else if (Array.isArray(result) && result.length > 0) scannedData = result[0]?.rawValue || result[0]?.data || result[0];
             
             if (scannedData) {
                 const trimmedData = scannedData.trim();
-                
-                // ✅ FIXED: Check if scanning own QR code
                 if (trimmedData === user.userId || trimmedData === user.rollNumber) {
-                    setMessage('Cannot send money to yourself. Please scan a different QR code.');
-                    return; // Don't close scanner, let user try again
+                    setMessage('Cannot send money to yourself.');
+                    return; 
                 }
-                
                 setReceiverId(trimmedData);
                 setIsScanning(false);
-                // ✅ FIXED: Better success message prompting for amount
                 setMessage('QR code scanned successfully! Please enter the amount.');
             } else {
-                console.warn('Invalid QR scan result:', result);
                 setMessage('Invalid QR code format. Please try again.');
             }
         } catch (error) {
-            console.error('Error processing QR result:', error);
             setMessage('Error reading QR code. Please try again or enter manually.');
         }
     };
@@ -251,23 +282,15 @@ const DashboardPage = () => {
         e.preventDefault(); 
         setMessage('');
         
-        if (Number(amount) <= 0) {
-            setMessage("Amount must be greater than 0.");
-            return;
-        }
-
-        // ✅ FIXED: Check if trying to send money to self (by manual ID entry)
-        if (receiverId.trim() === user.userId || receiverId.trim() === user.rollNumber) {
-            setMessage("Cannot send money to yourself.");
-            return; // Stay on the send modal, don't proceed
-        }
+        if (Number(amount) <= 0) { setMessage("Amount must be greater than 0."); return; }
+        if (receiverId.trim() === user.userId || receiverId.trim() === user.rollNumber) { setMessage("Cannot send money to yourself."); return; }
 
         setPendingTransaction({ 
             type: 'send', 
             payload: { receiverId, amount: Number(amount) } 
         });
-        
         setSPin(''); 
+        setTransactionStatus('input'); // Reset status
         setIsPinModalOpen(true);
         handleClose();
     };
@@ -275,18 +298,14 @@ const DashboardPage = () => {
     const handleTopUp = async (e) => {
         e.preventDefault(); 
         setMessage('');
-
-        if (Number(topUpAmount) <= 0) {
-            setMessage("Amount must be greater than 0.");
-            return;
-        }
+        if (Number(topUpAmount) <= 0) { setMessage("Amount must be greater than 0."); return; }
 
         setPendingTransaction({ 
             type: 'topup', 
             payload: { amount: Number(topUpAmount) } 
         });
-        
         setSPin(''); 
+        setTransactionStatus('input');
         setIsPinModalOpen(true);
         handleTopUpClose();
     };
@@ -297,48 +316,32 @@ const DashboardPage = () => {
         
         const finalRecipients = Object.entries(recipients)
             .filter(([, data]) => data.selected && data.amount && parseFloat(data.amount) > 0)
-            .map(([userId, data]) => ({
-                 receiverId: userId,
-                 amount: Number(parseFloat(data.amount).toFixed(2))
-            }));
+            .map(([userId, data]) => ({ receiverId: userId, amount: Number(parseFloat(data.amount).toFixed(2)) }));
 
-        if (finalRecipients.length === 0) {
-            setMessage('Please select recipients and enter a valid positive amount.'); 
-            return;
-        }
-        
+        if (finalRecipients.length === 0) { setMessage('Please select recipients and enter a valid positive amount.'); return; }
         const totalAmountToSend = finalRecipients.reduce((sum, r) => sum + r.amount, 0);
-        // ✅ FIXED: Changed $ to ₹ in error message
-        if (user && user.balance < totalAmountToSend) {
-             setMessage(`Insufficient balance. Need: ₹${totalAmountToSend.toFixed(2)}`);
-             return; 
-        }
+        if (user && user.balance < totalAmountToSend) { setMessage(`Insufficient balance. Need: ₹${totalAmountToSend.toFixed(2)}`); return; }
 
         setPendingTransaction({ 
             type: 'group', 
             payload: { recipients: finalRecipients } 
         });
-        
         setSPin(''); 
+        setTransactionStatus('input');
         setIsPinModalOpen(true);
         handleGroupClose();
     };
 
-    // S-PIN FLOW STEP 2: Handle Final Confirmation
+    // ✅ UPDATED CONFIRMATION LOGIC WITH ANIMATION
     const handleConfirmTransaction = async (e) => {
         e.preventDefault();
         setMessage('');
-        setIsSending(true);
+        
+        // 1. Switch to processing animation
+        setTransactionStatus('processing');
 
-        const startTime = Date.now();
         let apiEndpoint = '';
         let apiPayload = {};
-
-        if (!pendingTransaction) {
-            setMessage('Error: No transaction is pending.');
-            setIsSending(false);
-            return;
-        }
 
         if (pendingTransaction.type === 'send') {
             apiEndpoint = '/api/wallet/send';
@@ -352,38 +355,46 @@ const DashboardPage = () => {
         }
 
         try {
+            // Artificial delay (min 1 second) so users see the ripple animation
+            // This prevents the UI from flickering if the API is too fast
+            const start = Date.now();
             await api.post(apiEndpoint, apiPayload);
-            setMessage('Transaction successful!');
-            
-            const elapsedTime = Date.now() - startTime;
-            const remainingTime = MIN_ANIMATION_TIME - elapsedTime;
-            
-            setTimeout(async () => {
-                setIsSending(false);
-                handlePinModalClose();
-                await fetchHistory();
-                window.location.reload();
-            }, remainingTime > 0 ? remainingTime : 0);
-        
+            const duration = Date.now() - start;
+            const delay = Math.max(0, 1200 - duration);
+
+            setTimeout(() => {
+                // 2. API Success -> Show Checkmark Animation
+                setTransactionStatus('success');
+                setMessage('Success!');
+                
+                // 3. Wait for animation to finish, then close
+                setTimeout(async () => {
+                    handlePinModalClose();
+                    await fetchHistory();
+                    window.location.reload();
+                }, 2200); // 2.2 seconds display for success message
+            }, delay);
+
         } catch (error) {
-            setMessage(error.response?.data?.message || 'Transaction failed.');
-            setIsSending(false);
+            // Error handling
+            console.error("Tx failed", error);
+            // Optional: You could make an 'error' animation status too
+            setTransactionStatus('input'); 
+            setMessage(error.response?.data?.message || 'Transaction failed. Check S-Pin.');
             setSPin('');
         }
     };
 
     const handleLogout = () => { logout(); };
 
-    if (!user) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
-    }
+    if (!user) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
 
     return (
         <Container maxWidth="sm" sx={{ mt: 4, pb: 4 }}>
             <PageTitle />
             
             {/* Balance Card */}
-            <Card sx={{ p: 3, mb: 4, backgroundColor: '#6da9d2ff', color: 'white', borderRadius: 4, position: 'relative' }}>
+            <Card sx={{ p: 3, mb: 4, backgroundColor: '#6da9d2ff', color: 'white', borderRadius: 4 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
                         {user.rollNumber || user.userId || 'Not Available'}
@@ -420,16 +431,7 @@ const DashboardPage = () => {
                                 const isSender = tx.senderUserId === user.userId;
                                 const isTopUp = tx.senderUserId === tx.receiverUserId;
                                 const isDebit = isSender && !isTopUp;
-
-                                let primaryText = '';
-                                if (isDebit) {
-                                    primaryText = `Sent to ${tx.receiverName}`;
-                                } else if (isTopUp) {
-                                    primaryText = `Wallet Top-Up`;
-                                } else {
-                                    primaryText = `Received from ${tx.senderName}`;
-                                }
-
+                                let primaryText = isDebit ? `Sent to ${tx.receiverName}` : isTopUp ? `Wallet Top-Up` : `Received from ${tx.senderName}`;
                                 return (
                                     <>
                                         <ListItem>
@@ -437,7 +439,6 @@ const DashboardPage = () => {
                                                 primary={primaryText} 
                                                 secondary={new Date(tx.createdAt).toLocaleString()} 
                                             />
-                                            {/* ✅ FIXED: Changed $ to ₹ */}
                                             <Typography 
                                                 color={isDebit ? 'error' : 'success.main'}
                                                 sx={{ fontWeight: 'bold' }}
@@ -454,44 +455,30 @@ const DashboardPage = () => {
                 </List>
             </Paper>
 
-            {/* "Send" Modal */}
+            {/* SEND, TOPUP, RECEIVE, GROUP MODALS... (Unchanged logic, just hiding for brevity) */}
             <Modal open={open} onClose={handleClose}>
                 <Box sx={modalStyle}>
                     {isScanning ? (
                       <>
                         <Typography variant="h6" component="h2" gutterBottom>Scan Recipient QR Code</Typography>
-                        {/* ✅ FIXED: Updated Scanner component with better props and error handling */}
                         <Scanner 
                             onScan={handleScanResult}
-                            onError={(error) => {
-                                console.error('QR Scanner error:', error);
-                                setMessage('Failed to scan QR code. Please try again or enter manually.');
-                            }}
-                            constraints={{
-                                facingMode: 'environment',
-                                aspectRatio: 1
-                            }}
+                            onError={(error) => setMessage('Failed to scan QR code.')}
+                            constraints={{ facingMode: 'environment', aspectRatio: 1 }}
                             containerStyle={{ width: '100%' }}
                             scanDelay={300}
                         />
-                        {/* ✅ FIXED: Display message during scanning */}
-                        {message && (
-                            <Typography 
-                                sx={{ mt: 2, color: message.includes('success') ? 'success.main' : 'error.main' }}
-                            >
-                                {message}
-                            </Typography>
-                        )}
+                        {message && <Typography sx={{ mt: 2, color: 'error.main' }}>{message}</Typography>}
                         <Button onClick={() => { setIsScanning(false); setMessage(''); }} sx={{ mt: 2 }}>Enter Manually</Button>
                       </>
                     ) : (
-                       <>
+                      <>
                          <Typography variant="h6" component="h2" gutterBottom>Send Money</Typography>
                          <Box component="form" onSubmit={handleSendMoney}>
                             <TextField label="Recipient's User ID" fullWidth required sx={{ mb: 2 }} value={receiverId} onChange={(e) => setReceiverId(e.target.value)} />
                             <TextField label="Amount" type="number" fullWidth required sx={{ mb: 2 }} value={amount} onChange={(e) => setAmount(e.target.value)} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}/>
                             <Button type="submit" variant="contained" fullWidth size="large">Next</Button>
-                            {message && <Typography sx={{ mt: 2, color: message.includes('success') ? 'success.main' : 'red' }}>{message}</Typography>}
+                            {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
                         </Box>
                         <Divider sx={{ my: 2 }}>OR</Divider>
                         <Button variant="outlined" startIcon={<QrCodeScannerIcon />} fullWidth onClick={() => setIsScanning(true)}>Scan QR Code</Button>
@@ -499,8 +486,6 @@ const DashboardPage = () => {
                     )}
                  </Box>
             </Modal>
-
-            {/* "Top Up" Modal */}
             <Modal open={topUpOpen} onClose={handleTopUpClose}>
                  <Box sx={modalStyle}>
                     <Typography variant="h6" component="h2" gutterBottom>Top Up Your Wallet</Typography>
@@ -511,8 +496,6 @@ const DashboardPage = () => {
                     </Box>
                 </Box>
             </Modal>
-
-            {/* "Receive" Modal */}
             <Modal open={receiveOpen} onClose={handleReceiveClose}>
                 <Box sx={modalStyle}>
                     <Typography variant="h6" component="h2" gutterBottom>Receive Money</Typography>
@@ -523,8 +506,6 @@ const DashboardPage = () => {
                     <Typography variant="h6" sx={{ mt: 2, fontWeight: 'bold' }}>Your User ID: {user.userId}</Typography>
                 </Box>
             </Modal>
-
-            {/* ID Modal */}
             <Modal open={idModalOpen} onClose={handleIdClose}>
                 <Box sx={modalStyle}>
                     <Typography variant="h6" gutterBottom>User ID</Typography>
@@ -532,65 +513,55 @@ const DashboardPage = () => {
                     <Button variant="contained" startIcon={<ContentCopyIcon />} onClick={handleCopyId}>Copy</Button>
                 </Box>
             </Modal>
-
-            <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={2000}
-                onClose={handleSnackbarClose}
-                message="Copied to clipboard"
-                action={<IconButton size="small" color="inherit" onClick={handleSnackbarClose}><CloseIcon fontSize="small" /></IconButton>}
-            />
-
-            {/* "Send to Dept Team" Modal */}
             <Modal open={groupOpen} onClose={handleGroupClose}>
                 <Box sx={{ ...modalStyle, width: { xs: '90%', md: 600 } }}>
-                    <>
-                        <Typography variant="h6" gutterBottom>Send to Department Team</Typography>
-                        <FormControl fullWidth sx={{ my: 2 }}>
-                            <InputLabel>Select Target Role</InputLabel>
-                            <Select value={targetRole} label="Select Target Role" onChange={(e) => setTargetRole(e.target.value)}>
-                                <MenuItem value={'Head'}>Heads</MenuItem>
-                                <MenuItem value={'Coordinator'}>Coordinators</MenuItem>
-                                <MenuItem value={'Volunteer'}>Volunteers</MenuItem>
-                            </Select>
-                        </FormControl>
-
-                        {groupMembers.length > 0 && (
-                            <Box component="form" onSubmit={handleSendGroup}>
-                                <Grid container spacing={1} alignItems="center" sx={{mb: 2}}>
-                                    <Grid item xs={8}>
-                                        <TextField label="Set Amount for All Selected" type="number" fullWidth size="small" value={commonAmount} onChange={e => setCommonAmount(e.target.value)} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}/>
-                                    </Grid>
-                                    <Grid item xs={4}>
-                                        <Button onClick={handleApplyCommonAmount} variant="outlined" size="medium" fullWidth>Apply</Button>
-                                    </Grid>
+                     <Typography variant="h6" gutterBottom>Send to Department Team</Typography>
+                     <FormControl fullWidth sx={{ my: 2 }}>
+                        <InputLabel>Select Target Role</InputLabel>
+                        <Select value={targetRole} label="Select Target Role" onChange={(e) => setTargetRole(e.target.value)}>
+                            <MenuItem value={'Head'}>Heads</MenuItem>
+                            <MenuItem value={'Coordinator'}>Coordinators</MenuItem>
+                            <MenuItem value={'Volunteer'}>Volunteers</MenuItem>
+                        </Select>
+                    </FormControl>
+                    {groupMembers.length > 0 && (
+                        <Box component="form" onSubmit={handleSendGroup}>
+                            <Grid container spacing={1} alignItems="center" sx={{mb: 2}}>
+                                <Grid item xs={8}>
+                                    <TextField label="Set Amount for All Selected" type="number" fullWidth size="small" value={commonAmount} onChange={e => setCommonAmount(e.target.value)} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}/>
                                 </Grid>
-                                <Paper sx={{ maxHeight: 300, overflow: 'auto', mb: 2, textAlign: 'left' }}>
-                                    <List dense>
-                                        {groupMembers.map(member => (
-                                            <ListItem key={member.userId} divider sx={{py: 0.5}}>
-                                                <FormControlLabel control={ <Checkbox checked={recipients[member.userId]?.selected || false} onChange={() => handleRecipientToggle(member.userId)} size="small"/> } label={`${member.name} (${member.userId})`} sx={{ flexGrow: 1, mr: 1 }} />
-                                                <TextField label="Amount" type="number" size="small" variant="outlined" value={recipients[member.userId]?.amount || ''} onChange={(e) => handleAmountChange(member.userId, e.target.value)} sx={{ width: '100px' }} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }} disabled={!recipients[member.userId]?.selected} />
-                                            </ListItem>
-                                        ))}
-                                    </List>
-                                </Paper>
-                                <Button type="submit" variant="contained" fullWidth>Next</Button>
-                            </Box>
-                        )}
-                         {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
-                    </>
-                 </Box>
+                                <Grid item xs={4}>
+                                    <Button onClick={handleApplyCommonAmount} variant="outlined" size="medium" fullWidth>Apply</Button>
+                                </Grid>
+                            </Grid>
+                            <Paper sx={{ maxHeight: 300, overflow: 'auto', mb: 2, textAlign: 'left' }}>
+                                <List dense>
+                                    {groupMembers.map(member => (
+                                        <ListItem key={member.userId} divider sx={{py: 0.5}}>
+                                            <FormControlLabel control={ <Checkbox checked={recipients[member.userId]?.selected || false} onChange={() => handleRecipientToggle(member.userId)} size="small"/> } label={`${member.name} (${member.userId})`} sx={{ flexGrow: 1, mr: 1 }} />
+                                            <TextField label="Amount" type="number" size="small" variant="outlined" value={recipients[member.userId]?.amount || ''} onChange={(e) => handleAmountChange(member.userId, e.target.value)} sx={{ width: '100px' }} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }} disabled={!recipients[member.userId]?.selected} />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            </Paper>
+                            <Button type="submit" variant="contained" fullWidth>Next</Button>
+                        </Box>
+                    )}
+                    {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
+                </Box>
             </Modal>
 
-            {/* S-PIN MODAL */}
+            {/* ✅ UPDATED S-PIN MODAL */}
             <Modal open={isPinModalOpen} onClose={handlePinModalClose}>
                 <Box sx={modalStyle}>
-                    {isSending ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '200px' }}>
-                            <CircularProgress size={60} />
-                            <Typography sx={{ mt: 2 }}>{message || 'Processing Transaction...'}</Typography>
-                        </Box>
+                    {/* If status is NOT 'input', we show the Animation Component 
+                       (handling both 'processing' and 'success' states internally)
+                    */}
+                    {transactionStatus !== 'input' ? (
+                        <TransactionStatus 
+                            status={transactionStatus} 
+                            message={transactionStatus === 'success' ? 'Transaction Completed!' : ''} 
+                        />
                     ) : (
                         <>
                             <Typography variant="h6" component="h2" gutterBottom>
@@ -605,25 +576,16 @@ const DashboardPage = () => {
                                     autoFocus
                                     value={sPin}
                                     onChange={(e) => setSPin(e.target.value)}
-                                    inputProps={{ 
-                                        maxLength: 4, 
-                                        inputMode: 'numeric', 
-                                        pattern: '[0-9]*' 
-                                    }}
+                                    inputProps={{ maxLength: 4, inputMode: 'numeric', pattern: '[0-9]*' }}
                                     sx={{ mb: 2 }}
                                     InputProps={{
-                                      endAdornment: (
-                                        <InputAdornment position="end">
-                                          <IconButton
-                                            aria-label="toggle s-pin visibility"
-                                            onClick={handleClickShowSPin}
-                                            onMouseDown={handleMouseDownSPin}
-                                            edge="end"
-                                          >
-                                            {showSPin ? <VisibilityOff /> : <Visibility />}
-                                          </IconButton>
-                                        </InputAdornment>
-                                      ),
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton onClick={handleClickShowSPin} onMouseDown={handleMouseDownSPin} edge="end">
+                                                    {showSPin ? <VisibilityOff /> : <Visibility />}
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
                                     }}
                                 />
                                 <Button type="submit" variant="contained" fullWidth size="large">

@@ -13,6 +13,7 @@ import DashboardPage from './components/DashboardPage';
 import HistoryPage from './components/HistoryPage';
 import ProfilePage from './components/ProfilePage';
 import VendorManagement from './components/VendorManagement';
+import { SnackbarProvider } from 'notistack';
 
 // Create a context that our components can use to get the theme toggle function
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
@@ -301,6 +302,12 @@ function App() {
     <ColorModeContext.Provider value={colorMode}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        {/* [Change 1] Add SnackbarProvider here */}
+                <SnackbarProvider 
+                    maxSnack={5} // Max 5 notifications on screen at once
+                    anchorOrigin={{ vertical: 'top', horizontal: 'right' }} // Top right corner
+                    autoHideDuration={5000} // Disappear after 5s
+                >
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
@@ -319,6 +326,7 @@ function App() {
             {/* Optional: Add a 404 Not Found route */}
             {/* <Route path="*" element={<NotFoundPage />} /> */}
           </Routes>
+          </SnackbarProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>
   );
