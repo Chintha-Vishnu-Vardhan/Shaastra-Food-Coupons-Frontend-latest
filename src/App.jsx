@@ -1,24 +1,26 @@
-import React, { useState, useMemo, createContext, useEffect } from 'react';
+import React, { useState, useMemo, createContext, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { SnackbarProvider } from 'notistack';
+import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
+import { SocketProvider } from './context/SocketContext'; // ✅ Added
 
-// Import all your pages and components
+// Import Layout and ProtectedRoute normally (needed immediately)
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
-import LoginPage from './components/LoginPage';
-import RegisterPage from './components/RegisterPage';
-import ForgotPasswordPage from './components/ForgotPasswordPage';
-import DashboardPage from './components/DashboardPage';
-import HistoryPage from './components/HistoryPage';
-import ProfilePage from './components/ProfilePage';
-import VendorManagement from './components/VendorManagement';
-import { SnackbarProvider } from 'notistack';
 
-// Create a context that our components can use to get the theme toggle function
+// --- PERFORMANCE: LAZY LOAD PAGES ---
+const LoginPage = React.lazy(() => import('./components/LoginPage'));
+const RegisterPage = React.lazy(() => import('./components/RegisterPage'));
+const ForgotPasswordPage = React.lazy(() => import('./components/ForgotPasswordPage'));
+const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
+const HistoryPage = React.lazy(() => import('./components/HistoryPage'));
+const ProfilePage = React.lazy(() => import('./components/ProfilePage'));
+const VendorManagement = React.lazy(() => import('./components/VendorManagement'));
+
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
-
-// ... ColorModeContext ...
 
 // --- Define your color palette ---
 const lightPalette = {
@@ -134,15 +136,20 @@ const darkPalette = {
     900: '#212121',
   },
 };
-// --- End color palette definition ---
+
+// Helper Component: Shows a spinner while the page code is downloading
+const PageLoader = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+    <CircularProgress />
+  </Box>
+);
 
 function App() {
   const [mode, setMode] = useState(() => localStorage.getItem('themeMode') || 'dark');
 
-    // Update localStorage when mode changes
-    useEffect(() => {
-      localStorage.setItem('themeMode', mode);
-    }, [mode]);
+  useEffect(() => {
+    localStorage.setItem('themeMode', mode);
+  }, [mode]);
 
   const colorMode = useMemo(() => ({
       toggleColorMode: () => {
@@ -150,11 +157,10 @@ function App() {
       },
   }), []);
 
-  // --- MODIFIED theme creation ---
   const theme = useMemo(() => createTheme({
     palette: {
-      mode, // Keep this to switch between light/dark definitions
-      ...(mode === 'light' ? lightPalette : darkPalette), // Apply the correct palette
+      mode,
+      ...(mode === 'light' ? lightPalette : darkPalette),
     },
     typography: {
       fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -296,37 +302,37 @@ function App() {
       },
     },
   }), [mode]);
-  // --- End modified theme creation ---
 
   return (
     <ColorModeContext.Provider value={colorMode}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        {/* [Change 1] Add SnackbarProvider here */}
-                <SnackbarProvider 
-                    maxSnack={5} // Max 5 notifications on screen at once
-                    anchorOrigin={{ vertical: 'top', horizontal: 'right' }} // Top right corner
-                    autoHideDuration={5000} // Disappear after 5s
-                >
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            {/* Protected Routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<Layout />}>
-                <Route path="/" element={<Navigate to="/dashboard" />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/history" element={<HistoryPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/vendor-management" element={<VendorManagement />} />
-              </Route>
-            </Route>
-            {/* Optional: Add a 404 Not Found route */}
-            {/* <Route path="*" element={<NotFoundPage />} /> */}
-          </Routes>
-          </SnackbarProvider>
+        <SnackbarProvider 
+            maxSnack={5}
+            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+            autoHideDuration={5000}
+        >
+          {/* ✅ WRAPPED IN SOCKET PROVIDER */}
+          <SocketProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route element={<ProtectedRoute />}>
+                  <Route element={<Layout />}>
+                    <Route path="/" element={<Navigate to="/dashboard" />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/history" element={<HistoryPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/vendor-management" element={<VendorManagement />} />
+                  </Route>
+                </Route>
+              </Routes>
+            </Suspense>
+          </SocketProvider>
+          {/* ✅ END WRAP */}
+        </SnackbarProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>
   );

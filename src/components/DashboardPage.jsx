@@ -1,14 +1,13 @@
 // src/components/DashboardPage.js
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box, Card, Typography, Button, TextField, Container, CircularProgress,
     Modal, List, ListItem, ListItemText, Divider, Paper,
     Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel, Grid,
-    InputAdornment,IconButton
+    InputAdornment, IconButton
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { io } from 'socket.io-client';
 import { useSnackbar } from 'notistack';
 import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
@@ -22,8 +21,10 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import QRCode from 'react-qr-code';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-// ✅ NEW IMPORT
 import TransactionStatus from './TransactionStatus';
+
+// ✅ NEW IMPORT: Use the global socket
+import { useSocket } from '../context/SocketContext';
 
 // Responsive Modal Style
 const modalStyle = {
@@ -45,15 +46,13 @@ const DashboardPage = () => {
     const { user, logout } = useAuth();
     const { enqueueSnackbar } = useSnackbar(); 
 
+    // ✅ Get the global socket instance
+    const socket = useSocket();
+
     const [transactions, setTransactions] = useState([]);
     const [message, setMessage] = useState('');
     const [idModalOpen, setIdModalOpen] = useState(false);
-
-    // ✅ NEW STATE: Controls the entire transaction animation flow
-    // Values: 'input', 'processing', 'success', 'error'
     const [transactionStatus, setTransactionStatus] = useState('input');
-
-    const socketRef = useRef();
 
     // Page Title component
     const PageTitle = () => (
@@ -117,7 +116,6 @@ const DashboardPage = () => {
     };
 
     const handlePinModalClose = () => {
-        // Prevent closing while processing or showing success animation
         if (transactionStatus === 'processing' || transactionStatus === 'success') return;
         
         setIsPinModalOpen(false);
@@ -125,7 +123,7 @@ const DashboardPage = () => {
         setSPin('');
         setPendingTransaction(null);
         setShowSPin(false);
-        setTransactionStatus('input'); // Reset status
+        setTransactionStatus('input');
     }
 
     const handleIdClose = () => setIdModalOpen(false);
@@ -146,14 +144,10 @@ const DashboardPage = () => {
     };
 
     // Data Fetching
-// ============================================
-// ✅ FIX: Handle both old and new API response formats
-// ============================================
     const fetchHistory = useCallback(async () => {
         if (!user) return;
         try {
             const historyRes = await api.get('/api/wallet/history');
-            // Check if response has pagination (new format) or is direct array (old format)
             const txData = historyRes.data.transactions || historyRes.data;
             setTransactions(txData);
         } catch (error) { 
@@ -161,29 +155,18 @@ const DashboardPage = () => {
         }
     }, [user]);
 
-
     useEffect(() => {
         fetchHistory();
     }, [fetchHistory]);
 
-    // --- REAL-TIME SOCKET LISTENER ---
+    // ✅ MODIFIED: Listen to global socket for List Updates only
     useEffect(() => {
-        if (!user) return;
+        if (!socket) return;
 
-        socketRef.current = io("http://localhost:5000");
-        socketRef.current.emit("join_room", user.userId);
-
-        socketRef.current.on("transaction_received", (data) => {
-            console.log("Real-time notification received:", data);
-            const audio = new Audio('https://codeskulptor-demos.commondatastorage.googleapis.com/pang/pop.mp3'); 
-            audio.play().catch(e => console.log("Audio play failed", e));
-
-            enqueueSnackbar(`💰 Received ₹${data.amount} from ${data.senderName}!`, { 
-                variant: 'success', 
-                autoHideDuration: 5000,
-                style: { fontSize: '1rem', fontWeight: 600 }
-            });
-
+        const handleNewTransaction = (data) => {
+            console.log("Dashboard list update:", data);
+            
+            // Just update the list. No sound/snackbar here.
             setTransactions(prev => [
                 {
                     id: data.id, 
@@ -196,13 +179,18 @@ const DashboardPage = () => {
                 },
                 ...prev
             ]);
-        });
-
-        return () => {
-            if (socketRef.current) socketRef.current.disconnect();
         };
-    }, [user, enqueueSnackbar]);
 
+        socket.on("transaction_received", handleNewTransaction);
+
+        // Cleanup: Remove this specific listener when dashboard unmounts
+        // (Do NOT disconnect the socket itself)
+        return () => {
+            socket.off("transaction_received", handleNewTransaction);
+        };
+    }, [socket, user]);
+
+    // ... Group Logic ...
     useEffect(() => {
         if (groupOpen && targetRole) {
             const fetchDeptMembersByRole = async () => {
@@ -285,11 +273,9 @@ const DashboardPage = () => {
         }
     };
 
-    // S-PIN FLOW STEP 1: Intercept Transaction
     const handleSendMoney = async (e) => {
         e.preventDefault(); 
         setMessage('');
-        
         if (Number(amount) <= 0) { setMessage("Amount must be greater than 0."); return; }
         if (receiverId.trim() === user.userId || receiverId.trim() === user.rollNumber) { setMessage("Cannot send money to yourself."); return; }
 
@@ -298,7 +284,7 @@ const DashboardPage = () => {
             payload: { receiverId, amount: Number(amount) } 
         });
         setSPin(''); 
-        setTransactionStatus('input'); // Reset status
+        setTransactionStatus('input');
         setIsPinModalOpen(true);
         handleClose();
     };
@@ -321,7 +307,6 @@ const DashboardPage = () => {
     const handleSendGroup = async (e) => {
         e.preventDefault(); 
         setMessage('');
-        
         const finalRecipients = Object.entries(recipients)
             .filter(([, data]) => data.selected && data.amount && parseFloat(data.amount) > 0)
             .map(([userId, data]) => ({ receiverId: userId, amount: Number(parseFloat(data.amount).toFixed(2)) }));
@@ -340,12 +325,9 @@ const DashboardPage = () => {
         handleGroupClose();
     };
 
-    // ✅ UPDATED CONFIRMATION LOGIC WITH ANIMATION
     const handleConfirmTransaction = async (e) => {
         e.preventDefault();
         setMessage('');
-        
-        // 1. Switch to processing animation
         setTransactionStatus('processing');
 
         let apiEndpoint = '';
@@ -363,30 +345,24 @@ const DashboardPage = () => {
         }
 
         try {
-            // Artificial delay (min 1 second) so users see the ripple animation
-            // This prevents the UI from flickering if the API is too fast
             const start = Date.now();
             await api.post(apiEndpoint, apiPayload);
             const duration = Date.now() - start;
             const delay = Math.max(0, 1200 - duration);
 
             setTimeout(() => {
-                // 2. API Success -> Show Checkmark Animation
                 setTransactionStatus('success');
                 setMessage('Success!');
                 
-                // 3. Wait for animation to finish, then close
                 setTimeout(async () => {
                     handlePinModalClose();
                     await fetchHistory();
                     window.location.reload();
-                }, 2200); // 2.2 seconds display for success message
+                }, 2200);
             }, delay);
 
         } catch (error) {
-            // Error handling
             console.error("Tx failed", error);
-            // Optional: You could make an 'error' animation status too
             setTransactionStatus('input'); 
             setMessage(error.response?.data?.message || 'Transaction failed. Check S-Pin.');
             setSPin('');
@@ -401,7 +377,6 @@ const DashboardPage = () => {
         <Container maxWidth="sm" sx={{ mt: 4, pb: 4 }}>
             <PageTitle />
             
-            {/* Balance Card */}
             <Card sx={{ p: 3, mb: 4, backgroundColor: '#6da9d2ff', color: 'white', borderRadius: 4 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
@@ -415,7 +390,6 @@ const DashboardPage = () => {
                 </Box>
             </Card>
 
-            {/* Quick Actions */}
             <Typography variant="h6" align="left" gutterBottom sx={{ mb: 2 }}>Quick Actions</Typography>
             <Grid container spacing={2} sx={{ mb: 4 }}>
                 <Grid item xs={6} sm={4}><Button variant="contained" startIcon={<SendIcon />} onClick={handleOpen} fullWidth>Send</Button></Grid>
@@ -429,7 +403,6 @@ const DashboardPage = () => {
                 )}
             </Grid>
 
-            {/* Recent Transactions */}
             <Typography variant="h6" align="left" gutterBottom sx={{ mt: 4 }}>Recent Transactions</Typography>
             <Paper elevation={2} sx={{ borderRadius: 2 }}>
                 <List sx={{ p: 0 }}>
@@ -463,7 +436,6 @@ const DashboardPage = () => {
                 </List>
             </Paper>
 
-            {/* SEND, TOPUP, RECEIVE, GROUP MODALS... (Unchanged logic, just hiding for brevity) */}
             <Modal open={open} onClose={handleClose}>
                 <Box sx={modalStyle}>
                     {isScanning ? (
@@ -559,7 +531,6 @@ const DashboardPage = () => {
                 </Box>
             </Modal>
 
-            {/* ✅ UPDATED S-PIN MODAL WITH TRANSACTION SUMMARY */}
             <Modal open={isPinModalOpen} onClose={handlePinModalClose}>
                 <Box sx={modalStyle}>
                     {transactionStatus !== 'input' ? (
@@ -569,11 +540,6 @@ const DashboardPage = () => {
                         />
                     ) : (
                         <>
-                        {/* ============================================
-                            ✅ UX IMPROVEMENT: Transaction Confirmation Summary
-                            ✅ THEME FIX: Now adapts to dark/light theme
-                            Shows user exactly what they're about to confirm
-                            ============================================ */}
                         {pendingTransaction && (
                             <Box sx={{ 
                                 bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
@@ -678,8 +644,6 @@ const DashboardPage = () => {
                                 )}
                             </Box>
                         )}
-
-
                             <Typography variant="h6" component="h2" gutterBottom>
                                 Enter S-Pin to Confirm
                             </Typography>
@@ -713,8 +677,6 @@ const DashboardPage = () => {
                     )}
                 </Box>
             </Modal>
-
-
             <Button variant="outlined" color="error" onClick={handleLogout} sx={{ mt: 4 }} fullWidth>Logout</Button>
         </Container>
     );
