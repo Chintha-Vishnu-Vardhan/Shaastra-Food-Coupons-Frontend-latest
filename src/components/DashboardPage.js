@@ -146,13 +146,21 @@ const DashboardPage = () => {
     };
 
     // Data Fetching
+// ============================================
+// ✅ FIX: Handle both old and new API response formats
+// ============================================
     const fetchHistory = useCallback(async () => {
         if (!user) return;
         try {
             const historyRes = await api.get('/api/wallet/history');
-            setTransactions(historyRes.data);
-        } catch (error) { console.error('Failed to fetch history:', error); }
+            // Check if response has pagination (new format) or is direct array (old format)
+            const txData = historyRes.data.transactions || historyRes.data;
+            setTransactions(txData);
+        } catch (error) { 
+            console.error('Failed to fetch history:', error); 
+        }
     }, [user]);
+
 
     useEffect(() => {
         fetchHistory();
@@ -551,12 +559,9 @@ const DashboardPage = () => {
                 </Box>
             </Modal>
 
-            {/* ✅ UPDATED S-PIN MODAL */}
+            {/* ✅ UPDATED S-PIN MODAL WITH TRANSACTION SUMMARY */}
             <Modal open={isPinModalOpen} onClose={handlePinModalClose}>
                 <Box sx={modalStyle}>
-                    {/* If status is NOT 'input', we show the Animation Component 
-                       (handling both 'processing' and 'success' states internally)
-                    */}
                     {transactionStatus !== 'input' ? (
                         <TransactionStatus 
                             status={transactionStatus} 
@@ -564,6 +569,117 @@ const DashboardPage = () => {
                         />
                     ) : (
                         <>
+                        {/* ============================================
+                            ✅ UX IMPROVEMENT: Transaction Confirmation Summary
+                            ✅ THEME FIX: Now adapts to dark/light theme
+                            Shows user exactly what they're about to confirm
+                            ============================================ */}
+                        {pendingTransaction && (
+                            <Box sx={{ 
+                                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
+                                p: 2, 
+                                borderRadius: 2, 
+                                mb: 3,
+                                border: (theme) => `1px solid ${theme.palette.divider}`
+                            }}>
+                                <Typography variant="h6" gutterBottom sx={{ 
+                                    fontWeight: 600,
+                                    color: 'text.primary'
+                                }}>
+                                    Transaction Details
+                                </Typography>
+                                <Divider sx={{ my: 1 }} />
+                                
+                                {pendingTransaction.type === 'send' && (
+                                    <>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">To:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                {pendingTransaction.payload.receiverId}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Amount:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                ₹{pendingTransaction.payload.amount.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Your Balance:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                ₹{user.balance.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Divider sx={{ my: 1 }} />
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary" fontWeight="600">Balance After:</Typography>
+                                            <Typography 
+                                                fontWeight="700" 
+                                                color={(user.balance - pendingTransaction.payload.amount) < 0 ? 'error.main' : 'success.main'}
+                                            >
+                                                ₹{(user.balance - pendingTransaction.payload.amount).toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                    </>
+                                )}
+
+                                {pendingTransaction.type === 'topup' && (
+                                    <>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Top-Up Amount:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                ₹{pendingTransaction.payload.amount.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Current Balance:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                ₹{user.balance.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Divider sx={{ my: 1 }} />
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary" fontWeight="600">Balance After:</Typography>
+                                            <Typography fontWeight="700" color="success.main">
+                                                ₹{(user.balance + pendingTransaction.payload.amount).toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                    </>
+                                )}
+
+                                {pendingTransaction.type === 'group' && (
+                                    <>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Recipients:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                {pendingTransaction.payload.recipients.length}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Total Amount:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                ₹{pendingTransaction.payload.recipients.reduce((sum, r) => sum + r.amount, 0).toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary">Your Balance:</Typography>
+                                            <Typography fontWeight="600" color="text.primary">
+                                                ₹{user.balance.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Divider sx={{ my: 1 }} />
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                                            <Typography color="text.secondary" fontWeight="600">Balance After:</Typography>
+                                            <Typography fontWeight="700" color="success.main">
+                                                ₹{(user.balance - pendingTransaction.payload.recipients.reduce((sum, r) => sum + r.amount, 0)).toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                    </>
+                                )}
+                            </Box>
+                        )}
+
+
                             <Typography variant="h6" component="h2" gutterBottom>
                                 Enter S-Pin to Confirm
                             </Typography>
@@ -597,6 +713,7 @@ const DashboardPage = () => {
                     )}
                 </Box>
             </Modal>
+
 
             <Button variant="outlined" color="error" onClick={handleLogout} sx={{ mt: 4 }} fullWidth>Logout</Button>
         </Container>
