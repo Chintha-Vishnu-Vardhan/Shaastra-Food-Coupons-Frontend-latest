@@ -71,7 +71,7 @@ const DashboardPage = () => {
                     fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.75rem' }
                 }}
             >
-                My Shaastra Wallet
+                Quick Actions {/* ✅ CHANGED from "My Shaastra Wallet" */}
             </Typography>
         </Box>
     );
@@ -258,18 +258,22 @@ const DashboardPage = () => {
             
             if (scannedData) {
                 const trimmedData = scannedData.trim();
-                if (trimmedData === user.userId || trimmedData === user.rollNumber) {
-                    setMessage('Cannot send money to yourself.');
+                
+                // ✅ CRITICAL FIX: Check against both userId AND rollNumber
+                if (trimmedData === user.userId || trimmedData === user.rollNumber || trimmedData.toUpperCase() === user.userId.toUpperCase()) {
+                    setMessage('❌ Cannot send money to yourself.');
+                    // Keep scanner open so user can try again
                     return; 
                 }
+                
                 setReceiverId(trimmedData);
                 setIsScanning(false);
-                setMessage('QR code scanned successfully! Please enter the amount.');
+                setMessage('✅ QR code scanned successfully! Please enter the amount.');
             } else {
-                setMessage('Invalid QR code format. Please try again.');
+                setMessage('⚠️ Invalid QR code format. Please try again.');
             }
         } catch (error) {
-            setMessage('Error reading QR code. Please try again or enter manually.');
+            setMessage('❌ Error reading QR code. Please try again or enter manually.');
         }
     };
 
@@ -439,32 +443,77 @@ const DashboardPage = () => {
             <Modal open={open} onClose={handleClose}>
                 <Box sx={modalStyle}>
                     {isScanning ? (
-                      <>
+                    <>
                         <Typography variant="h6" component="h2" gutterBottom>Scan Recipient QR Code</Typography>
                         <Scanner 
                             onScan={handleScanResult}
-                            onError={(error) => setMessage('Failed to scan QR code.')}
+                            onError={(error) => setMessage('❌ Failed to scan QR code.')}
                             constraints={{ facingMode: 'environment', aspectRatio: 1 }}
                             containerStyle={{ width: '100%' }}
                             scanDelay={300}
                         />
-                        {message && <Typography sx={{ mt: 2, color: 'error.main' }}>{message}</Typography>}
-                        <Button onClick={() => { setIsScanning(false); setMessage(''); }} sx={{ mt: 2 }}>Enter Manually</Button>
-                      </>
+                        {/* ✅ COLOR-CODED MESSAGE DISPLAY */}
+                        {message && (
+                            <Typography 
+                                sx={{ 
+                                    mt: 2, 
+                                    fontWeight: 600,
+                                    color: message.includes('✅') ? 'success.main' : 
+                                        message.includes('❌') ? 'error.main' : 
+                                        'warning.main'
+                                }}
+                            >
+                                {message}
+                            </Typography>
+                        )}
+                        <Button onClick={() => { setIsScanning(false); setMessage(''); }} sx={{ mt: 2 }}>
+                            Enter Manually
+                        </Button>
+                    </>
                     ) : (
-                      <>
-                         <Typography variant="h6" component="h2" gutterBottom>Send Money</Typography>
-                         <Box component="form" onSubmit={handleSendMoney}>
-                            <TextField label="Recipient's User ID" fullWidth required sx={{ mb: 2 }} value={receiverId} onChange={(e) => setReceiverId(e.target.value)} />
-                            <TextField label="Amount" type="number" fullWidth required sx={{ mb: 2 }} value={amount} onChange={(e) => setAmount(e.target.value)} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}/>
+                    <>
+                        <Typography variant="h6" component="h2" gutterBottom>Send Money</Typography>
+                        <Box component="form" onSubmit={handleSendMoney}>
+                            <TextField 
+                                label="Recipient's User ID" 
+                                fullWidth 
+                                required 
+                                sx={{ mb: 2 }} 
+                                value={receiverId} 
+                                onChange={(e) => setReceiverId(e.target.value)} 
+                            />
+                            <TextField 
+                                label="Amount" 
+                                type="number" 
+                                fullWidth 
+                                required 
+                                sx={{ mb: 2 }} 
+                                value={amount} 
+                                onChange={(e) => setAmount(e.target.value)} 
+                                InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}
+                            />
                             <Button type="submit" variant="contained" fullWidth size="large">Next</Button>
-                            {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
+                            {message && (
+                                <Typography 
+                                    sx={{ 
+                                        mt: 2, 
+                                        fontWeight: 600,
+                                        color: message.includes('✅') ? 'success.main' : 
+                                            message.includes('❌') ? 'error.main' : 
+                                            'error.main'
+                                    }}
+                                >
+                                    {message}
+                                </Typography>
+                            )}
                         </Box>
                         <Divider sx={{ my: 2 }}>OR</Divider>
-                        <Button variant="outlined" startIcon={<QrCodeScannerIcon />} fullWidth onClick={() => setIsScanning(true)}>Scan QR Code</Button>
-                      </>
+                        <Button variant="outlined" startIcon={<QrCodeScannerIcon />} fullWidth onClick={() => setIsScanning(true)}>
+                            Scan QR Code
+                        </Button>
+                    </>
                     )}
-                 </Box>
+                </Box>
             </Modal>
             <Modal open={topUpOpen} onClose={handleTopUpClose}>
                  <Box sx={modalStyle}>

@@ -1,39 +1,34 @@
-import React, { useState, useMemo, createContext, useEffect, Suspense } from 'react';
+// src/App.js - BLACK & WHITE THEME UPDATE
+
+import React, { useState, useMemo, createContext, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { SnackbarProvider } from 'notistack';
-import CircularProgress from '@mui/material/CircularProgress';
-import Box from '@mui/material/Box';
-import { SocketProvider } from './context/SocketContext'; // ✅ Added
 
-// Import Layout and ProtectedRoute normally (needed immediately)
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
-
-// --- PERFORMANCE: LAZY LOAD PAGES ---
-const LoginPage = React.lazy(() => import('./components/LoginPage'));
-const RegisterPage = React.lazy(() => import('./components/RegisterPage'));
-const ForgotPasswordPage = React.lazy(() => import('./components/ForgotPasswordPage'));
-const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
-const HistoryPage = React.lazy(() => import('./components/HistoryPage'));
-const ProfilePage = React.lazy(() => import('./components/ProfilePage'));
-const VendorManagement = React.lazy(() => import('./components/VendorManagement'));
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
+import DashboardPage from './components/DashboardPage';
+import HistoryPage from './components/HistoryPage';
+import ProfilePage from './components/ProfilePage';
+import { SnackbarProvider } from 'notistack';
 
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
 
-// --- Define your color palette ---
+// ✅ NEW BLACK & WHITE THEME PALETTES
 const lightPalette = {
   primary: {
-    main: '#1976d2',
-    light: '#42a5f5',
-    dark: '#1565c0',
+    main: '#000000', // Pure Black
+    light: '#333333',
+    dark: '#000000',
     contrastText: '#ffffff',
   },
   secondary: {
-    main: '#ff6f00',
-    light: '#ff8f00',
-    dark: '#e65100',
+    main: '#666666', // Medium Gray
+    light: '#888888',
+    dark: '#444444',
     contrastText: '#ffffff',
   },
   success: {
@@ -52,45 +47,45 @@ const lightPalette = {
     dark: '#e65100',
   },
   info: {
-    main: '#0288d1',
-    light: '#03a9f4',
-    dark: '#01579b',
+    main: '#333333',
+    light: '#666666',
+    dark: '#000000',
   },
   background: {
-    default: '#f8fafc',
-    paper: '#ffffff',
-    gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    default: '#ffffff', // Pure White
+    paper: '#f5f5f5', // Very Light Gray
+    gradient: 'linear-gradient(135deg, #000000 0%, #333333 100%)', // Black gradient
   },
   text: {
-    primary: '#1a202c',
-    secondary: '#4a5568',
-    disabled: '#a0aec0',
+    primary: '#000000', // Black text
+    secondary: '#666666', // Gray text
+    disabled: '#999999',
   },
   grey: {
-    50: '#f7fafc',
-    100: '#edf2f7',
-    200: '#e2e8f0',
-    300: '#cbd5e0',
-    400: '#a0aec0',
-    500: '#718096',
-    600: '#4a5568',
-    700: '#2d3748',
-    800: '#1a202c',
-    900: '#171923',
+    50: '#fafafa',
+    100: '#f5f5f5',
+    200: '#eeeeee',
+    300: '#e0e0e0',
+    400: '#bdbdbd',
+    500: '#9e9e9e',
+    600: '#757575',
+    700: '#616161',
+    800: '#424242',
+    900: '#212121',
   },
 };
 
 const darkPalette = {
   primary: {
-    main: '#90caf9',
-    light: '#e3f2fd',
-    dark: '#42a5f5',
+    main: '#ffffff', // Pure White
+    light: '#ffffff',
+    dark: '#cccccc',
     contrastText: '#000000',
   },
   secondary: {
-    main: '#ffb74d',
-    light: '#ffe0b2',
-    dark: '#f57c00',
+    main: '#aaaaaa', // Light Gray
+    light: '#cccccc',
+    dark: '#888888',
     contrastText: '#000000',
   },
   success: {
@@ -109,19 +104,19 @@ const darkPalette = {
     dark: '#f57c00',
   },
   info: {
-    main: '#29b6f6',
-    light: '#4fc3f7',
-    dark: '#0288d1',
+    main: '#cccccc',
+    light: '#eeeeee',
+    dark: '#999999',
   },
   background: {
-    default: '#0a0e27',
-    paper: '#1a1d3a',
-    gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    default: '#000000', // Pure Black
+    paper: '#1a1a1a', // Very Dark Gray
+    gradient: 'linear-gradient(135deg, #ffffff 0%, #cccccc 100%)', // White gradient
   },
   text: {
-    primary: '#ffffff',
-    secondary: '#b0bec5',
-    disabled: '#616161',
+    primary: '#ffffff', // White text
+    secondary: '#aaaaaa', // Light Gray text
+    disabled: '#666666',
   },
   grey: {
     50: '#fafafa',
@@ -136,13 +131,6 @@ const darkPalette = {
     900: '#212121',
   },
 };
-
-// Helper Component: Shows a spinner while the page code is downloading
-const PageLoader = () => (
-  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-    <CircularProgress />
-  </Box>
-);
 
 function App() {
   const [mode, setMode] = useState(() => localStorage.getItem('themeMode') || 'dark');
@@ -296,7 +284,7 @@ function App() {
           root: {
             boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
             backdropFilter: 'blur(10px)',
-            backgroundColor: mode === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(26, 29, 58, 0.95)',
+            backgroundColor: mode === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(0, 0, 0, 0.95)',
           },
         },
       },
@@ -312,27 +300,20 @@ function App() {
             anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
             autoHideDuration={5000}
         >
-          {/* ✅ WRAPPED IN SOCKET PROVIDER */}
-          <SocketProvider>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                <Route element={<ProtectedRoute />}>
-                  <Route element={<Layout />}>
-                    <Route path="/" element={<Navigate to="/dashboard" />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/history" element={<HistoryPage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
-                    <Route path="/vendor-management" element={<VendorManagement />} />
-                  </Route>
-                </Route>
-              </Routes>
-            </Suspense>
-          </SocketProvider>
-          {/* ✅ END WRAP */}
-        </SnackbarProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Navigate to="/dashboard" />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/history" element={<HistoryPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+              </Route>
+            </Route>
+          </Routes>
+          </SnackbarProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>
   );

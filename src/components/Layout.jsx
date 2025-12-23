@@ -1,4 +1,4 @@
-// src/components/Layout.js
+// src/components/Layout.js - UPDATED VERSION
 import React, { useContext, useState } from 'react';
 import { 
   AppBar, 
@@ -27,13 +27,10 @@ import {
   History,
   Person,
   Logout,
-  Receipt,
   Settings
 } from '@mui/icons-material';
-// RIGHT ✅
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
-
 
 const drawerWidth = 280;
 
@@ -64,22 +61,27 @@ const Layout = () => {
     handleProfileMenuClose();
   };
 
+  // ✅ UPDATED: Removed Vendor Management from navigation
   const navigationItems = [
-    { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
+    { text: 'Quick Actions', icon: <Dashboard />, path: '/dashboard' },
     { text: 'Transaction History', icon: <History />, path: '/history' },
-    { text: 'Profile', icon: <Person />, path: '/profile' },
-    ...(user && user.department === 'Finance' && user.role === 'Core' ? [{ text: 'Vendor Management', icon: <Receipt />, path: '/vendor-management' }]: [])
+    { text: 'Profile', icon: <Person />, path: '/profile' }
+    // Vendor Management removed
   ];
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo and Brand */}
       <Box sx={{ p: 4, textAlign: 'center', borderBottom: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        {/* ✅ LOGO WILL BE UPDATED IN NEXT ARTIFACT */}
         <Box
           component="img"
-          src="/Shaastra_2026_logo.png"
+          src={theme.palette.mode === 'dark' ? '/Shaastra_logo_white.png' : '/Shaastra_logo_black.png'}
           alt="Shaastra Logo"
-          sx={{ height: { xs: 72, sm: 56, md: 44 }, mb: 1 }}
+          sx={{ 
+            height: { xs: 72, sm: 56, md: 44 }, 
+            mb: 1,
+            filter: theme.palette.mode === 'dark' ? 'none' : 'none' // Ensures crisp rendering
+          }}
         />
         <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', fontSize: { xs: '1.05rem', sm: '0.95rem' } }}>
           Shaastra Wallet
@@ -89,10 +91,6 @@ const Layout = () => {
         </Typography>
       </Box>
 
-      {/* NOTE: user info removed from drawer header on mobile to avoid duplication.
-          The logo is made larger and centered above; user info remains in the main content. */}
-
-      {/* Navigation Items */}
       <List sx={{ flex: 1, px: 2 }}>
         {navigationItems.map((item) => {
           const isActive = location.pathname === item.path;
@@ -135,14 +133,11 @@ const Layout = () => {
           );
         })}
       </List>
-
-
     </Box>
   );
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* App Bar */}
       <AppBar
         position="fixed"
         sx={{
@@ -177,7 +172,7 @@ const Layout = () => {
               {navigationItems.find(item => item.path === location.pathname)?.text || 'Shaastra Wallet'}
             </Typography>
           </Box>
-          {/* --- ADD THEME TOGGLE BUTTON HERE --- */}
+
           <IconButton 
             sx={{ ml: 1 }} 
             onClick={colorMode.toggleColorMode} 
@@ -186,10 +181,7 @@ const Layout = () => {
           >
             {theme.palette.mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
-          {/* --- END ADDITION --- */}
-          {/* notifications removed (unused) */}
 
-          {/* Profile Menu */}
           {isAuthenticated && (
             <IconButton
               size="large"
@@ -208,7 +200,6 @@ const Layout = () => {
         </Toolbar>
       </AppBar>
 
-      {/* Profile Menu */}
       <Menu
         anchorEl={anchorEl}
         id="account-menu"
@@ -265,23 +256,20 @@ const Layout = () => {
         </MenuItem>
       </Menu>
 
-      {/* Drawer */}
       <Box
         component="nav"
         sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
         aria-label="mailbox folders"
       >
-        {/* Mobile drawer */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
+            keepMounted: true,
           }}
           PaperProps={{
             sx: {
-              // push the temporary drawer content below the fixed AppBar on small screens
               top: { xs: '64px', sm: '64px' },
             }
           }}
@@ -293,7 +281,6 @@ const Layout = () => {
           {drawer}
         </Drawer>
         
-        {/* Desktop drawer */}
         <Drawer
           variant="permanent"
           sx={{
@@ -306,7 +293,6 @@ const Layout = () => {
         </Drawer>
       </Box>
 
-      {/* Main content */}
       <Box
         component="main"
         sx={{
