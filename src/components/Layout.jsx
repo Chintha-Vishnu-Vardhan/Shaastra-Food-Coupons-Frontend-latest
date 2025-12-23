@@ -31,6 +31,7 @@ import {
 } from '@mui/icons-material';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 
 const drawerWidth = 280;
 
@@ -65,8 +66,12 @@ const Layout = () => {
   const navigationItems = [
     { text: 'Quick Actions', icon: <Dashboard />, path: '/dashboard' },
     { text: 'Transaction History', icon: <History />, path: '/history' },
-    { text: 'Profile', icon: <Person />, path: '/profile' }
-    // Vendor Management removed
+    { text: 'Profile', icon: <Person />, path: '/profile' },
+    // ✅ NEW: Conditionally show Balance Reset for Finance Core
+    ...(user && user.department === 'Finance' && user.role === 'Core' 
+      ? [{ text: 'Balance Reset', icon: <RestartAltIcon />, path: '/balance-reset' }] 
+      : []
+    )
   ];
 
   const drawer = (

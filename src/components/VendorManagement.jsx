@@ -1,35 +1,42 @@
-// src/components/VendorManagement.js
-// THEME-AWARE VERSION - WITH DATE FILTERS
-
+// src/components/VendorManagement.js - WITH CSV EXPORT
 import React, { useState } from 'react';
 import {
   Container, Card, Typography, Box, TextField, Button, 
   CircularProgress, Alert, Paper, List, ListItem, 
   ListItemText, Divider, Grid, Chip, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, useTheme
+  TableCell, TableContainer, TableHead, TableRow, useTheme,
+  Menu, MenuItem, IconButton
 } from '@mui/material';
 import { 
   Search, Receipt, Download, TrendingUp, TrendingDown,
-  AccountBalance, CalendarToday
+  AccountBalance, CalendarToday, MoreVert
 } from '@mui/icons-material';
 import api from '../api';
 
 const VendorManagement = () => {
   const theme = useTheme();
   const [searchUserId, setSearchUserId] = useState('');
-  
-  // ✅ NEW: Date Filter State
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [userData, setUserData] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [statementData, setStatementData] = useState(null);
-  const [activeView, setActiveView] = useState('search'); // 'search', 'transactions', 'statement'
+  const [activeView, setActiveView] = useState('search');
 
-  // Helper to build query params
+  // ✅ CSV Export Menu
+  const [anchorEl, setAnchorEl] = useState(null);
+  const openMenu = Boolean(anchorEl);
+
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
   const getQueryParams = () => {
     const params = {};
     if (startDate) params.startDate = new Date(startDate).toISOString();
@@ -49,7 +56,6 @@ const VendorManagement = () => {
     setTransactions([]);
 
     try {
-      // ✅ Updated to include date params
       const response = await api.get(`/api/vendor-management/user/${searchUserId.trim()}/transactions`, {
         params: getQueryParams()
       });
@@ -75,7 +81,6 @@ const VendorManagement = () => {
     setStatementData(null);
 
     try {
-      // ✅ Updated to include date params
       const response = await api.get(`/api/vendor-management/user/${searchUserId.trim()}/statement`, {
         params: getQueryParams()
       });
@@ -89,11 +94,48 @@ const VendorManagement = () => {
     }
   };
 
+  // ✅ CSV EXPORT FUNCTIONS
+  const handleExportCSV = async (exportAll = false) => {
+    handleMenuClose();
+    
+    if (!searchUserId.trim()) {
+      setError('Please enter a User ID first');
+      return;
+    }
+
+    try {
+      const params = {
+        ...getQueryParams(),
+        exportAll: exportAll.toString()
+      };
+
+      const response = await api.get(
+        `/api/vendor-management/user/${searchUserId.trim()}/export-csv`,
+        { 
+          params,
+          responseType: 'blob' // Important for file download
+        }
+      );
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${searchUserId}_transactions_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Error exporting CSV');
+      console.error('CSV export error:', err);
+    }
+  };
+
   const handleDownloadPDF = () => {
     if (!statementData) return;
 
     const printWindow = window.open('', '', 'height=800,width=1000');
-    // ✅ Pass date range to PDF generator
     const html = generateStatementHTML(statementData, startDate, endDate);
     
     printWindow.document.write(html);
@@ -109,7 +151,6 @@ const VendorManagement = () => {
   const generateStatementHTML = (data, start, end) => {
     const { user, summary, dateSummary, transactions } = data;
     
-    // Format Date Range for Display
     const dateRangeText = (start && end) 
       ? `${new Date(start).toLocaleString('en-IN')} to ${new Date(end).toLocaleString('en-IN')}`
       : 'All Time';
@@ -348,9 +389,11 @@ const VendorManagement = () => {
           <thead>
             <tr>
               <th>Date & Time</th>
-              <th>Type</th>
-              <th>From/To</th>
-              <th>Amount</th>
+              <th>From/To ID</th>
+              <th>From/To Name</th>
+              <th>Debit</th>
+              <th>Credit</th>
+              <th>Balance Now</th>
             </tr>
           </thead>
           <tbody>
@@ -358,32 +401,38 @@ const VendorManagement = () => {
               const isSender = tx.senderUserId === user.userId;
               const isTopUp = tx.senderUserId === tx.receiverUserId;
               
-              let type = '';
-              let counterparty = '';
+              let fromToId = '';
+              let fromToName = '';
+              let debit = '';
+              let credit = '';
               
-              if (isTopUp) {
-                type = 'Top-Up';
-                counterparty = 'System';
-              } else if (isSender) {
-                type = 'Sent';
-                counterparty = `${tx.receiverName} (${tx.receiverUserId})`;
+              if (isSender && !isTopUp) {
+                fromToId = tx.receiverUserId;
+                fromToName = tx.receiverName;
+                debit = tx.amount.toFixed(2);
               } else {
-                type = 'Received';
-                counterparty = `${tx.senderName} (${tx.senderUserId})`;
+                if (isTopUp) {
+                  fromToId = 'FINANCE_TOPUP';
+                  fromToName = 'System Top-Up';
+                } else {
+                  fromToId = tx.senderUserId;
+                  fromToName = tx.senderName;
+                }
+                credit = tx.amount.toFixed(2);
               }
               
               return `
                 <tr>
                   <td>${new Date(tx.createdAt).toLocaleString('en-IN')}</td>
-                  <td>${type}</td>
-                  <td>${counterparty}</td>
-                  <td class="${isSender && !isTopUp ? 'amount-sent' : 'amount-received'}">
-                    ${isSender && !isTopUp ? '-' : '+'}₹${tx.amount.toFixed(2)}
-                  </td>
+                  <td>${fromToId}</td>
+                  <td>${fromToName}</td>
+                  <td class="amount-sent">${debit ? '-₹' + debit : '-'}</td>
+                  <td class="amount-received">${credit ? '+₹' + credit : '-'}</td>
+                  <td>${tx.balanceAfter ? '₹' + tx.balanceAfter.toFixed(2) : '-'}</td>
                 </tr>
               `;
             }).join('')}
-            ${transactions.length === 0 ? '<tr><td colspan="4" style="text-align:center;">No transactions found in this period.</td></tr>' : ''}
+            ${transactions.length === 0 ? '<tr><td colspan="6" style="text-align:center;">No transactions found in this period.</td></tr>' : ''}
           </tbody>
         </table>
 
@@ -402,10 +451,8 @@ const VendorManagement = () => {
         Vendor & Transaction Management
       </Typography>
 
-      {/* ✅ SEARCH CARD WITH DATE FILTERS */}
       <Card sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2}>
-          {/* Row 1: Search Input */}
           <Grid item xs={12}>
             <TextField
               fullWidth
@@ -416,7 +463,6 @@ const VendorManagement = () => {
             />
           </Grid>
           
-          {/* Row 2: Date Filters */}
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
@@ -438,7 +484,6 @@ const VendorManagement = () => {
             />
           </Grid>
 
-          {/* Row 3: Buttons */}
           <Grid item xs={12} sm={6}>
             <Button
               variant="contained"
@@ -489,7 +534,16 @@ const VendorManagement = () => {
               : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
             color: 'white' 
           }}>
-            <Typography variant="h6" gutterBottom>User Information</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">User Information</Typography>
+              {/* ✅ CSV EXPORT BUTTON */}
+              <IconButton
+                onClick={handleMenuOpen}
+                sx={{ color: 'white' }}
+              >
+                <Download />
+              </IconButton>
+            </Box>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <Typography><strong>Name:</strong> {userData.name}</Typography>
@@ -504,20 +558,24 @@ const VendorManagement = () => {
             </Grid>
           </Card>
 
+          {/* ✅ CSV EXPORT MENU */}
+          <Menu
+            anchorEl={anchorEl}
+            open={openMenu}
+            onClose={handleMenuClose}
+          >
+            <MenuItem onClick={() => handleExportCSV(false)}>
+              <Download sx={{ mr: 1 }} /> Export Current Page
+            </MenuItem>
+            <MenuItem onClick={() => handleExportCSV(true)}>
+              <Download sx={{ mr: 1 }} /> Export All Transactions
+            </MenuItem>
+          </Menu>
+
           <Paper sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Transaction History ({transactions.length})
-              </Typography>
-              {(startDate || endDate) && (
-                <Chip 
-                  label="Filtered View" 
-                  color="warning" 
-                  size="small" 
-                  variant="outlined"
-                />
-              )}
-            </Box>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Transaction History ({transactions.length})
+            </Typography>
             
             <List>
               {transactions.length === 0 ? (
@@ -544,7 +602,14 @@ const VendorManagement = () => {
                       <ListItem>
                         <ListItemText
                           primary={primaryText}
-                          secondary={new Date(tx.createdAt).toLocaleString('en-IN')}
+                          secondary={
+                            <>
+                              {new Date(tx.createdAt).toLocaleString('en-IN')}
+                              {tx.balanceAfter && (
+                                <> • Balance: ₹{tx.balanceAfter.toFixed(2)}</>
+                              )}
+                            </>
+                          }
                         />
                         <Chip
                           label={`${isDebit ? '-' : '+'}₹${tx.amount.toFixed(2)}`}
@@ -575,17 +640,23 @@ const VendorManagement = () => {
                    </Typography>
                 )}
               </Box>
-              <Button
-                variant="contained"
-                startIcon={<Download />}
-                onClick={handleDownloadPDF}
-                color="success"
-              >
-                Download PDF
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {/* ✅ CSV EXPORT BUTTON */}
+                <IconButton onClick={handleMenuOpen} color="primary">
+                  <Download />
+                </IconButton>
+                <Button
+                  variant="contained"
+                  startIcon={<Receipt />}
+                  onClick={handleDownloadPDF}
+                  color="success"
+                  size="small"
+                >
+                  PDF
+                </Button>
+              </Box>
             </Box>
 
-            {/* User Info */}
             <Paper sx={{ 
               p: 2, 
               mb: 3, 
@@ -696,7 +767,7 @@ const VendorManagement = () => {
                   ))}
                   {statementData.dateSummary.length === 0 && (
                      <TableRow>
-                       <TableCell colspan={4} align="center">No activity in this period.</TableCell>
+                       <TableCell colSpan={4} align="center">No activity in this period.</TableCell>
                      </TableRow>
                   )}
                 </TableBody>
