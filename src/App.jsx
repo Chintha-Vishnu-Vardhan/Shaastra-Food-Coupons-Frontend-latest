@@ -55,7 +55,8 @@ const lightPalette = {
     dark: '#01579b',
   },
   background: {
-    default: '#f8fafc',
+    // Pure white background for the 'white' theme
+    default: '#ffffff',
     paper: '#ffffff',
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   },
@@ -112,8 +113,9 @@ const darkPalette = {
     dark: '#0288d1',
   },
   background: {
-    default: '#0a0e27',
-    paper: '#1a1d3a',
+    // Pure black background for the 'black' theme
+    default: '#000000',
+    paper: '#000000',
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   },
   text: {

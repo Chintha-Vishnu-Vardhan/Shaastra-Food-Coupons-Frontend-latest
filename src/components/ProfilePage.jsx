@@ -1,14 +1,16 @@
-// src/components/ProfilePage.js
+// src/components/ProfilePage.jsx
+// ✅ FIXED: S-Pin Reset OTP Flow
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
     Container, Card, Typography, Box, Button, CircularProgress, Divider,
-    Modal, TextField 
+    Modal, TextField, IconButton, InputAdornment
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import api from '../api'; // Import api
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import api from '../api';
 
-// Define modal style (can be shared or redefined)
 const modalStyle = {
   position: 'absolute',
   top: '50%',
@@ -25,18 +27,17 @@ const modalStyle = {
 };
 
 const ProfilePage = () => {
-  // Get user details and logout function from authentication context
   const { user, logout, isAuthenticated } = useAuth();
 
-  // --- State for S-Pin Reset Modal ---
+  // S-Pin Reset State
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState(1); // 1 for button, 2 for OTP/new pin
+  const [step, setStep] = useState(1); // 1: Request OTP, 2: Enter OTP+Pin
   const [otp, setOtp] = useState('');
   const [newSPin, setNewSPin] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSPin, setShowSPin] = useState(false);
 
-  // --- Modal Handlers ---
   const handleOpen = () => {
     setOpen(true);
     setStep(1);
@@ -44,9 +45,73 @@ const ProfilePage = () => {
     setOtp('');
     setNewSPin('');
   };
-  const handleClose = () => setOpen(false);
+  
+  const handleClose = () => {
+    setOpen(false);
+    setStep(1);
+    setMessage('');
+    setOtp('');
+    setNewSPin('');
+  };
 
-  // Handle case where user data might still be loading or user is not authenticated
+  // ✅ FIX 1: Proper OTP Request Handler
+  const handleRequestOtp = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const response = await api.post('/api/auth/forgot-spin-otp');
+      setMessage(response.data.message || 'OTP sent to your email!');
+      setStep(2);
+    } catch (error) {
+      const errMsg = error.response?.data?.message || 'Failed to send OTP';
+      setMessage(errMsg);
+      console.error('S-Pin OTP Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ FIX 2: Proper Reset Handler with Validation
+  const handleResetSpin = async (e) => {
+    e.preventDefault();
+    
+    if (!otp || otp.length !== 6) {
+      setMessage('Please enter a valid 6-digit OTP');
+      return;
+    }
+    
+    if (!newSPin || newSPin.length !== 4 || !/^\d{4}$/.test(newSPin)) {
+      setMessage('S-Pin must be exactly 4 digits');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+    
+    try {
+      const response = await api.post('/api/auth/reset-spin', { 
+        otp, 
+        newSPin 
+      });
+      
+      setMessage(response.data.message || 'S-Pin reset successful!');
+      
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
+    } catch (error) {
+      const errMsg = error.response?.data?.message || 'S-Pin reset failed';
+      setMessage(errMsg);
+      console.error('S-Pin Reset Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+  };
+
   if (!isAuthenticated || !user) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -56,47 +121,6 @@ const ProfilePage = () => {
     );
   }
 
-  // --- S-Pin API Handlers ---
-
-  // Step 1: Request OTP
-  const handleRequestOtp = async () => {
-    setLoading(true);
-    setMessage('');
-    try {
-      const response = await api.post('/api/auth/forgot-spin-otp');
-      setMessage(response.data.message);
-      setStep(2); // Move to OTP entry step
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'Error sending OTP.');
-    }
-    setLoading(false);
-  };
-
-  // Step 2: Verify OTP and Reset S-Pin
-  const handleResetSpin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage('');
-    try {
-      const body = { otp, newSPin };
-      const response = await api.post('/api/auth/reset-spin', body);
-      setMessage(response.data.message);
-      setLoading(false);
-      // On success, close modal after a short delay
-      setTimeout(() => {
-        handleClose();
-      }, 2000);
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'S-Pin reset failed.');
-      setLoading(false);
-    }
-  };
-
-  // Calls the logout function from the AuthContext
-  const handleLogout = () => {
-    logout();
-  };
-
   return (
     <Container component="main" maxWidth="sm" sx={{ mt: 8, mb: 4 }}>
       <Card sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: 2 }}>
@@ -104,7 +128,6 @@ const ProfilePage = () => {
           User Profile
         </Typography>
 
-        {/* Display user details */}
         <Box sx={{ width: '100%', mt: 2 }}>
           <ProfileDetail label="Name" value={user.name} />
           <Divider sx={{ my: 1.5 }} />
@@ -119,7 +142,6 @@ const ProfilePage = () => {
           <ProfileDetail label="Smail ID" value={user.smail || 'N/A'} />
         </Box>
 
-        {/* --- Action Buttons --- */}
         <Button
            component={RouterLink}
            to="/dashboard"
@@ -129,7 +151,6 @@ const ProfilePage = () => {
            Back to Dashboard
          </Button>
          
-        {/* --- ADDED S-PIN BUTTON --- */}
         <Button
           variant="outlined"
           color="warning"
@@ -138,7 +159,6 @@ const ProfilePage = () => {
         >
           Reset S-Pin
         </Button>
-        {/* --- END ADDITION --- */}
 
         <Button
           variant="outlined"
@@ -150,7 +170,7 @@ const ProfilePage = () => {
         </Button>
       </Card>
 
-      {/* --- ADDED S-PIN RESET MODAL --- */}
+      {/* ✅ FIXED S-PIN RESET MODAL */}
       <Modal open={open} onClose={handleClose}>
         <Box sx={modalStyle}>
           <Typography component="h2" variant="h6" gutterBottom>
@@ -161,7 +181,11 @@ const ProfilePage = () => {
 
           {!loading && message && (
             <Typography
-              color={message.includes('successful') || message.includes('sent') ? 'success.main' : 'error'}
+              color={
+                message.includes('success') || message.includes('sent') 
+                  ? 'success.main' 
+                  : 'error.main'
+              }
               align="center"
               variant="body2"
               sx={{ my: 2 }}
@@ -170,68 +194,96 @@ const ProfilePage = () => {
             </Typography>
           )}
 
-          {/* Step 1: Button to request OTP */}
+          {/* STEP 1: Request OTP */}
           {!loading && step === 1 && (
             <>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                An OTP will be sent to your registered s-mail ID ({user.smail}) to verify your identity.
+                An OTP will be sent to your registered email: <strong>{user.smail}</strong>
               </Typography>
-              <Button variant="contained" onClick={handleRequestOtp} fullWidth>
+              <Button 
+                variant="contained" 
+                onClick={handleRequestOtp} 
+                fullWidth
+                disabled={loading}
+              >
                 Send OTP
               </Button>
             </>
           )}
 
-          {/* Step 2: Form to enter OTP and new S-Pin */}
+          {/* STEP 2: Enter OTP + New S-Pin */}
           {!loading && step === 2 && (
             <Box component="form" onSubmit={handleResetSpin}>
               <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  name="otp"
-                  label="OTP from E-mail"
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                margin="normal"
+                required
+                fullWidth
+                name="otp"
+                label="6-Digit OTP from Email"
+                type="text"
+                value={otp}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  if (val.length <= 6) setOtp(val);
+                }}
+                inputProps={{ 
+                  maxLength: 6,
+                  inputMode: 'numeric'
+                }}
               />
               <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  name="newSPin"
-                  label="New 4-Digit S-Pin"
-                  type="password" // Hide S-Pin
-                  value={newSPin}
-                  onChange={(e) => setNewSPin(e.target.value)}
-                  inputProps={{ 
-                      maxLength: 4, 
-                      inputMode: 'numeric', 
-                      pattern: '[0-9]*' 
-                  }}
+                margin="normal"
+                required
+                fullWidth
+                name="newSPin"
+                label="New 4-Digit S-Pin"
+                type={showSPin ? 'text' : 'password'}
+                value={newSPin}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  if (val.length <= 4) setNewSPin(val);
+                }}
+                inputProps={{ 
+                  maxLength: 4,
+                  inputMode: 'numeric'
+                }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowSPin(!showSPin)}
+                        edge="end"
+                      >
+                        {showSPin ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
-              <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
+              <Button 
+                type="submit" 
+                variant="contained" 
+                fullWidth 
+                sx={{ mt: 2 }}
+                disabled={loading || !otp || !newSPin}
+              >
                 Confirm & Reset S-Pin
               </Button>
             </Box>
           )}
-
         </Box>
       </Modal>
-      {/* --- END MODAL --- */}
-
     </Container>
   );
 };
 
-// Helper component for consistent detail display
 const ProfileDetail = ({ label, value }) => (
   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
     <Typography variant="body1" sx={{ fontWeight: 'medium', color: 'text.secondary' }}>
       {label}:
     </Typography>
     <Typography variant="body1">
-      {value || 'N/A'} {/* Fallback for potentially null/undefined values */}
+      {value || 'N/A'}
     </Typography>
   </Box>
 );

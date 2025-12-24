@@ -72,72 +72,53 @@ const Layout = () => {
   ];
 
   const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo and Brand */}
-      <Box sx={{ p: 4, textAlign: 'center', borderBottom: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <Box
-          component="img"
-          src="/Shaastra_2026_logo.png"
-          alt="Shaastra Logo"
-          sx={{ height: { xs: 72, sm: 56, md: 44 }, mb: 1 }}
-        />
-        <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', fontSize: { xs: '1.05rem', sm: '0.95rem' } }}>
-          Shaastra Wallet
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.85rem', sm: '0.8rem' } }}>
-          Virtual Food Coupons
-        </Typography>
-      </Box>
+    // src/components/Layout.jsx
+    // ✅ FIX: Dynamic logo based on theme (black/white PNGs)
 
-      {/* NOTE: user info removed from drawer header on mobile to avoid duplication.
-          The logo is made larger and centered above; user info remains in the main content. */}
+    // In the drawer logo section, replace the Box component with:
 
-      {/* Navigation Items */}
-      <List sx={{ flex: 1, px: 2 }}>
-        {navigationItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                component={RouterLink}
-                to={item.path}
-                selected={isActive}
-                sx={{
-                  borderRadius: 2,
-                  mb: 0.5,
-                  '&.Mui-selected': {
-                    backgroundColor: 'primary.main',
-                    color: 'white',
-                    '&:hover': {
-                      backgroundColor: 'primary.dark',
-                    },
-                    '& .MuiListItemIcon-root': {
-                      color: 'white',
-                    },
-                  },
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText 
-                  primary={item.text}
-                  primaryTypographyProps={{
-                    fontWeight: isActive ? 600 : 400,
-                    fontSize: '0.875rem',
-                  }}
-                />
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
-      </List>
-
-
+    <Box sx={{ 
+      p: 4, 
+      textAlign: 'center', 
+      borderBottom: 1, 
+      borderColor: 'divider', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center' 
+    }}>
+      {/* ✅ THEME-AWARE LOGO SWITCHING */}
+      <Box
+        component="img"
+        src={theme.palette.mode === 'light' 
+          ? "/Shaastra_2026_logo_black.png"  // ← Your black PNG for light mode
+          : "/Shaastra_2026_logo_white.png"  // ← Your white PNG for dark mode
+        }
+        alt="Shaastra Logo"
+        sx={{ 
+          height: { xs: 72, sm: 56, md: 44 }, 
+          mb: 1,
+          transition: 'opacity 0.3s ease',
+          '&:hover': {
+            opacity: 0.8
+          }
+        }}
+      />
+      <Typography variant="h6" sx={{ 
+        fontWeight: 700, 
+        color: 'primary.main', 
+        fontSize: { xs: '1.05rem', sm: '0.95rem' } 
+      }}>
+        Shaastra Wallet
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ 
+        fontSize: { xs: '0.85rem', sm: '0.8rem' } 
+      }}>
+        Virtual Food Coupons
+      </Typography>
     </Box>
+
+
   );
 
   return (

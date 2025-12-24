@@ -15,6 +15,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import AddCardIcon from '@mui/icons-material/AddCard';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Visibility from '@mui/icons-material/Visibility';
@@ -47,6 +48,7 @@ const DashboardPage = () => {
 
     const [transactions, setTransactions] = useState([]);
     const [message, setMessage] = useState('');
+    const [messageType, setMessageType] = useState('info');
     const [idModalOpen, setIdModalOpen] = useState(false);
 
     // ✅ NEW STATE: Controls the entire transaction animation flow
@@ -72,7 +74,7 @@ const DashboardPage = () => {
                     fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.75rem' }
                 }}
             >
-                My Shaastra Wallet
+                Quick Actions
             </Typography>
         </Box>
     );
@@ -108,6 +110,8 @@ const DashboardPage = () => {
     const handleClose = () => { setOpen(false); setMessage(''); setReceiverId(''); setAmount(''); setIsScanning(false); };
     const handleTopUpOpen = () => setTopUpOpen(true);
     const handleTopUpClose = () => { setTopUpOpen(false); setMessage(''); setTopUpAmount(''); };
+    // Ensure message type resets when modals close
+    const _resetMessage = () => { setMessage(''); setMessageType('info'); };
     const handleReceiveOpen = () => setReceiveOpen(true);
     const handleReceiveClose = () => setReceiveOpen(false);
     const handleGroupOpen = () => setGroupOpen(true);
@@ -122,6 +126,7 @@ const DashboardPage = () => {
         
         setIsPinModalOpen(false);
         setMessage('');
+        setMessageType('info');
         setSPin('');
         setPendingTransaction(null);
         setShowSPin(false);
@@ -216,8 +221,10 @@ const DashboardPage = () => {
                         return acc;
                     }, {});
                     setRecipients(initialRecipients);
+                    setMessageType('info');
                 } catch (err) {
                     setMessage(err.response?.data?.message || 'Error fetching members.');
+                    setMessageType('error');
                 }
             };
             fetchDeptMembersByRole();
@@ -245,6 +252,7 @@ const DashboardPage = () => {
         const amountToApply = commonAmount.match(/^\d*\.?\d*$/) ? commonAmount : '';
         if (amountToApply === '' || parseFloat(amountToApply) <= 0) {
             setMessage('Please enter a valid positive common amount.');
+            setMessageType('error');
             return;
         }
         setRecipients(prev => {
@@ -257,6 +265,7 @@ const DashboardPage = () => {
             return newRecipients;
         });
         setMessage('');
+        setMessageType('info');
     };
 
     const handleScanResult = (result) => {
@@ -272,16 +281,20 @@ const DashboardPage = () => {
                 const trimmedData = scannedData.trim();
                 if (trimmedData === user.userId || trimmedData === user.rollNumber) {
                     setMessage('Cannot send money to yourself.');
+                    setMessageType('error');
                     return; 
                 }
                 setReceiverId(trimmedData);
                 setIsScanning(false);
                 setMessage('QR code scanned successfully! Please enter the amount.');
+                setMessageType('success');
             } else {
                 setMessage('Invalid QR code format. Please try again.');
+                setMessageType('error');
             }
         } catch (error) {
             setMessage('Error reading QR code. Please try again or enter manually.');
+            setMessageType('error');
         }
     };
 
@@ -289,9 +302,10 @@ const DashboardPage = () => {
     const handleSendMoney = async (e) => {
         e.preventDefault(); 
         setMessage('');
+        setMessageType('info');
         
-        if (Number(amount) <= 0) { setMessage("Amount must be greater than 0."); return; }
-        if (receiverId.trim() === user.userId || receiverId.trim() === user.rollNumber) { setMessage("Cannot send money to yourself."); return; }
+        if (Number(amount) <= 0) { setMessage("Amount must be greater than 0."); setMessageType('error'); return; }
+        if (receiverId.trim() === user.userId || receiverId.trim() === user.rollNumber) { setMessage("Cannot send money to yourself."); setMessageType('error'); return; }
 
         setPendingTransaction({ 
             type: 'send', 
@@ -306,7 +320,8 @@ const DashboardPage = () => {
     const handleTopUp = async (e) => {
         e.preventDefault(); 
         setMessage('');
-        if (Number(topUpAmount) <= 0) { setMessage("Amount must be greater than 0."); return; }
+        setMessageType('info');
+        if (Number(topUpAmount) <= 0) { setMessage("Amount must be greater than 0."); setMessageType('error'); return; }
 
         setPendingTransaction({ 
             type: 'topup', 
@@ -321,14 +336,15 @@ const DashboardPage = () => {
     const handleSendGroup = async (e) => {
         e.preventDefault(); 
         setMessage('');
+        setMessageType('info');
         
         const finalRecipients = Object.entries(recipients)
             .filter(([, data]) => data.selected && data.amount && parseFloat(data.amount) > 0)
             .map(([userId, data]) => ({ receiverId: userId, amount: Number(parseFloat(data.amount).toFixed(2)) }));
 
-        if (finalRecipients.length === 0) { setMessage('Please select recipients and enter a valid positive amount.'); return; }
+        if (finalRecipients.length === 0) { setMessage('Please select recipients and enter a valid positive amount.'); setMessageType('error'); return; }
         const totalAmountToSend = finalRecipients.reduce((sum, r) => sum + r.amount, 0);
-        if (user && user.balance < totalAmountToSend) { setMessage(`Insufficient balance. Need: ₹${totalAmountToSend.toFixed(2)}`); return; }
+        if (user && user.balance < totalAmountToSend) { setMessage(`Insufficient balance. Need: ₹${totalAmountToSend.toFixed(2)}`); setMessageType('error'); return; }
 
         setPendingTransaction({ 
             type: 'group', 
@@ -344,6 +360,7 @@ const DashboardPage = () => {
     const handleConfirmTransaction = async (e) => {
         e.preventDefault();
         setMessage('');
+        setMessageType('info');
         
         // 1. Switch to processing animation
         setTransactionStatus('processing');
@@ -374,6 +391,7 @@ const DashboardPage = () => {
                 // 2. API Success -> Show Checkmark Animation
                 setTransactionStatus('success');
                 setMessage('Success!');
+                setMessageType('success');
                 
                 // 3. Wait for animation to finish, then close
                 setTimeout(async () => {
@@ -389,6 +407,7 @@ const DashboardPage = () => {
             // Optional: You could make an 'error' animation status too
             setTransactionStatus('input'); 
             setMessage(error.response?.data?.message || 'Transaction failed. Check S-Pin.');
+            setMessageType('error');
             setSPin('');
         }
     };
@@ -424,9 +443,12 @@ const DashboardPage = () => {
                 {user.department === 'Finance' && user.role === 'Core' && (
                      <Grid item xs={6} sm={4}><Button variant="contained" color="success" startIcon={<AddCardIcon />} onClick={handleTopUpOpen} fullWidth>Top Up</Button></Grid>
                 )}
-                {(user.role === 'Core' || user.role === 'Finance Core') && user.department && (
+                 {(user.role === 'Core' || user.role === 'Finance Core') && user.department && (
                      <Grid item xs={6} sm={4}><Button variant="contained" color="secondary" startIcon={<GroupAddIcon />} onClick={handleGroupOpen} fullWidth>Send to Dept Team</Button></Grid>
-                )}
+                 )}
+                 {user.department === 'Finance' && user.role === 'Core' && (
+                     <Grid item xs={6} sm={4}><Button component={Link} to="/vendor-management" variant="outlined" startIcon={<ReceiptIcon />} fullWidth>Vendor Management</Button></Grid>
+                 )}
             </Grid>
 
             {/* Recent Transactions */}
@@ -471,12 +493,12 @@ const DashboardPage = () => {
                         <Typography variant="h6" component="h2" gutterBottom>Scan Recipient QR Code</Typography>
                         <Scanner 
                             onScan={handleScanResult}
-                            onError={(error) => setMessage('Failed to scan QR code.')}
+                            onError={(error) => { setMessage('Failed to scan QR code.'); setMessageType('error'); }}
                             constraints={{ facingMode: 'environment', aspectRatio: 1 }}
                             containerStyle={{ width: '100%' }}
                             scanDelay={300}
                         />
-                        {message && <Typography sx={{ mt: 2, color: 'error.main' }}>{message}</Typography>}
+                        {message && <Typography sx={{ mt: 2, color: messageType === 'error' ? 'error.main' : messageType === 'success' ? 'success.main' : 'text.secondary' }}>{message}</Typography>}
                         <Button onClick={() => { setIsScanning(false); setMessage(''); }} sx={{ mt: 2 }}>Enter Manually</Button>
                       </>
                     ) : (
@@ -486,7 +508,7 @@ const DashboardPage = () => {
                             <TextField label="Recipient's User ID" fullWidth required sx={{ mb: 2 }} value={receiverId} onChange={(e) => setReceiverId(e.target.value)} />
                             <TextField label="Amount" type="number" fullWidth required sx={{ mb: 2 }} value={amount} onChange={(e) => setAmount(e.target.value)} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}/>
                             <Button type="submit" variant="contained" fullWidth size="large">Next</Button>
-                            {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
+                            {message && <Typography sx={{ mt: 2, color: messageType === 'error' ? 'error.main' : messageType === 'success' ? 'success.main' : 'text.secondary' }}>{message}</Typography>}
                         </Box>
                         <Divider sx={{ my: 2 }}>OR</Divider>
                         <Button variant="outlined" startIcon={<QrCodeScannerIcon />} fullWidth onClick={() => setIsScanning(true)}>Scan QR Code</Button>
@@ -500,7 +522,7 @@ const DashboardPage = () => {
                     <Box component="form" onSubmit={handleTopUp}>
                         <TextField label="Amount to Add" type="number" fullWidth required sx={{ mb: 2 }} value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} InputProps={{ inputProps: { min: 0.01, step: 0.01 } }}/>
                         <Button type="submit" variant="contained" color="success" fullWidth size="large">Next</Button>
-                        {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
+                        {message && <Typography sx={{ mt: 2, color: messageType === 'error' ? 'error.main' : messageType === 'success' ? 'success.main' : 'text.secondary' }}>{message}</Typography>}
                     </Box>
                 </Box>
             </Modal>
@@ -508,7 +530,7 @@ const DashboardPage = () => {
                 <Box sx={modalStyle}>
                     <Typography variant="h6" component="h2" gutterBottom>Receive Money</Typography>
                     <Typography variant="body2" sx={{ mb: 2 }}>Others can scan this code or use your User ID.</Typography>
-                    <Box sx={{ p: 2, backgroundColor: 'white', display: 'inline-block', borderRadius: 1 }}>
+                    <Box sx={{ p: 2, backgroundColor: (theme) => theme.palette.background.paper, display: 'inline-block', borderRadius: 1 }}>
                         <QRCode value={user.userId} size={200} />
                     </Box>
                     <Typography variant="h6" sx={{ mt: 2, fontWeight: 'bold' }}>Your User ID: {user.userId}</Typography>
@@ -555,7 +577,7 @@ const DashboardPage = () => {
                             <Button type="submit" variant="contained" fullWidth>Next</Button>
                         </Box>
                     )}
-                    {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
+                    {message && <Typography sx={{ mt: 2, color: messageType === 'error' ? 'error.main' : messageType === 'success' ? 'success.main' : 'text.secondary' }}>{message}</Typography>}
                 </Box>
             </Modal>
 
@@ -707,7 +729,7 @@ const DashboardPage = () => {
                                 <Button type="submit" variant="contained" fullWidth size="large">
                                     Confirm & Pay
                                 </Button>
-                                {message && <Typography sx={{ mt: 2, color: 'red' }}>{message}</Typography>}
+                                {message && <Typography sx={{ mt: 2, color: messageType === 'error' ? 'error.main' : messageType === 'success' ? 'success.main' : 'text.secondary' }}>{message}</Typography>}
                             </Box>
                         </>
                     )}
