@@ -1,5 +1,5 @@
-// src/components/VendorManagement.js
-// THEME-AWARE VERSION - WITH DATE FILTERS
+// src/components/VendorManagement.jsx
+// ✅ COMPLETE VERSION WITH DOWNLOAD FEATURE
 
 import React, { useState } from 'react';
 import {
@@ -17,19 +17,15 @@ import api from '../api';
 const VendorManagement = () => {
   const theme = useTheme();
   const [searchUserId, setSearchUserId] = useState('');
-  
-  // ✅ NEW: Date Filter State
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [userData, setUserData] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [statementData, setStatementData] = useState(null);
-  const [activeView, setActiveView] = useState('search'); // 'search', 'transactions', 'statement'
+  const [activeView, setActiveView] = useState('search');
 
-  // Helper to build query params
   const getQueryParams = () => {
     const params = {};
     if (startDate) params.startDate = new Date(startDate).toISOString();
@@ -49,7 +45,6 @@ const VendorManagement = () => {
     setTransactions([]);
 
     try {
-      // ✅ Updated to include date params
       const response = await api.get(`/api/vendor-management/user/${searchUserId.trim()}/transactions`, {
         params: getQueryParams()
       });
@@ -64,6 +59,49 @@ const VendorManagement = () => {
     }
   };
 
+  // ✅ NEW: Download transactions for the searched user
+  const handleDownloadTransactions = async () => {
+    if (!searchUserId.trim() || !userData) {
+      setError('Please search for a user first');
+      return;
+    }
+
+    try {
+      const response = await api.get(
+        `/api/vendor-management/user/${searchUserId.trim()}/transactions/download`,
+        {
+          params: getQueryParams(),
+          responseType: 'blob'
+        }
+      );
+
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const timestamp = new Date().toISOString().split('T')[0];
+      const dateRangeText = (startDate && endDate) 
+        ? `_${startDate.split('T')[0]}_to_${endDate.split('T')[0]}`
+        : '_AllTime';
+      
+      link.setAttribute(
+        'download', 
+        `Transactions_${userData.userId}_${userData.name.replace(/\s+/g, '_')}${dateRangeText}_${timestamp}.csv`
+      );
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Download error:', error);
+      setError(error.response?.data?.message || 'Failed to download transactions.');
+    }
+  };
+
   const handleGenerateStatement = async () => {
     if (!searchUserId.trim()) {
       setError('Please enter a User ID');
@@ -75,7 +113,6 @@ const VendorManagement = () => {
     setStatementData(null);
 
     try {
-      // ✅ Updated to include date params
       const response = await api.get(`/api/vendor-management/user/${searchUserId.trim()}/statement`, {
         params: getQueryParams()
       });
@@ -93,7 +130,6 @@ const VendorManagement = () => {
     if (!statementData) return;
 
     const printWindow = window.open('', '', 'height=800,width=1000');
-    // ✅ Pass date range to PDF generator
     const html = generateStatementHTML(statementData, startDate, endDate);
     
     printWindow.document.write(html);
@@ -109,7 +145,6 @@ const VendorManagement = () => {
   const generateStatementHTML = (data, start, end) => {
     const { user, summary, dateSummary, transactions } = data;
     
-    // Format Date Range for Display
     const dateRangeText = (start && end) 
       ? `${new Date(start).toLocaleString('en-IN')} to ${new Date(end).toLocaleString('en-IN')}`
       : 'All Time';
@@ -402,10 +437,8 @@ const VendorManagement = () => {
         Vendor & Transaction Management
       </Typography>
 
-      {/* ✅ SEARCH CARD WITH DATE FILTERS */}
       <Card sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2}>
-          {/* Row 1: Search Input */}
           <Grid item xs={12}>
             <TextField
               fullWidth
@@ -416,7 +449,6 @@ const VendorManagement = () => {
             />
           </Grid>
           
-          {/* Row 2: Date Filters */}
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
@@ -438,8 +470,7 @@ const VendorManagement = () => {
             />
           </Grid>
 
-          {/* Row 3: Buttons */}
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <Button
               variant="contained"
               startIcon={<Search />}
@@ -451,7 +482,23 @@ const VendorManagement = () => {
               View Transactions
             </Button>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          
+          {/* ✅ NEW: Download Button */}
+          <Grid item xs={12} sm={4}>
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<Download />}
+              onClick={handleDownloadTransactions}
+              disabled={loading || !userData}
+              fullWidth
+              sx={{ height: '100%' }}
+            >
+              Download CSV
+            </Button>
+          </Grid>
+          
+          <Grid item xs={12} sm={4}>
             <Button
               variant="outlined"
               startIcon={<Receipt />}
@@ -585,7 +632,6 @@ const VendorManagement = () => {
               </Button>
             </Box>
 
-            {/* User Info */}
             <Paper sx={{ 
               p: 2, 
               mb: 3, 
@@ -607,7 +653,6 @@ const VendorManagement = () => {
               </Grid>
             </Paper>
 
-            {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} sm={6} md={3}>
                 <Card sx={{ p: 2, bgcolor: 'success.light', color: 'white' }}>
@@ -659,7 +704,6 @@ const VendorManagement = () => {
               </Grid>
             </Grid>
 
-            {/* Date-wise Summary Table */}
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
               Date-wise Summary
             </Typography>
@@ -696,7 +740,7 @@ const VendorManagement = () => {
                   ))}
                   {statementData.dateSummary.length === 0 && (
                      <TableRow>
-                       <TableCell colspan={4} align="center">No activity in this period.</TableCell>
+                       <TableCell colSpan={4} align="center">No activity in this period.</TableCell>
                      </TableRow>
                   )}
                 </TableBody>

@@ -1,4 +1,4 @@
-// src/components/HistoryPage.js - WITH PAGINATION, FILTERS, AND DATETIME PICKER
+// src/components/HistoryPage.jsx - WITH DOWNLOAD FEATURE FOR VENDORS
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
@@ -30,7 +30,8 @@ import {
     AddCard,
     ArrowBack,
     Search,
-    FilterList
+    FilterList,
+    Download // ✅ NEW IMPORT
 } from '@mui/icons-material';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -41,25 +42,18 @@ const HistoryPage = () => {
     const [error, setError] = useState('');
     const { user, isAuthenticated } = useAuth();
 
-    // ============================================
-    // ✅ UX IMPROVEMENT: Pagination state
-    // ============================================
+    // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalTransactions, setTotalTransactions] = useState(0);
 
-    // ============================================
-    // ✅ UX IMPROVEMENT: Search and filter state
-    // ============================================
+    // Search and filter state
     const [searchQuery, setSearchQuery] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [txType, setTxType] = useState(''); // '', 'sent', 'received', 'topup'
+    const [txType, setTxType] = useState('');
     const [showFilters, setShowFilters] = useState(false);
 
-    // ============================================
-    // ✅ UX IMPROVEMENT: Fetch with pagination and filters
-    // ============================================
     const fetchTransactions = async () => {
         if (!isAuthenticated || !user) {
             setLoading(false);
@@ -82,12 +76,10 @@ const HistoryPage = () => {
             
             setTransactions(historyRes.data.transactions || historyRes.data);
             
-            // If pagination data exists in response
             if (historyRes.data.pagination) {
                 setTotalPages(historyRes.data.pagination.totalPages);
                 setTotalTransactions(historyRes.data.pagination.totalTransactions);
             } else {
-                // Fallback for old API response format
                 setTransactions(historyRes.data);
             }
             
@@ -104,11 +96,8 @@ const HistoryPage = () => {
         fetchTransactions();
     }, [currentPage, user, isAuthenticated]);
 
-    // ============================================
-    // ✅ UX IMPROVEMENT: Handle search/filter apply
-    // ============================================
     const handleApplyFilters = () => {
-        setCurrentPage(1); // Reset to first page
+        setCurrentPage(1);
         fetchTransactions();
     };
 
@@ -118,8 +107,41 @@ const HistoryPage = () => {
         setEndDate('');
         setTxType('');
         setCurrentPage(1);
-        // Fetch will be triggered by useEffect when states change
         setTimeout(fetchTransactions, 100);
+    };
+
+    // ✅ NEW: Download transactions as CSV
+    const handleDownloadTransactions = async () => {
+        try {
+            const params = {};
+            if (searchQuery) params.search = searchQuery;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (txType) params.type = txType;
+
+            const response = await api.get('/api/wallet/history/download', {
+                params,
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            
+            const timestamp = new Date().toISOString().split('T')[0];
+            link.setAttribute('download', `Shaastra_Transactions_${user.userId}_${timestamp}.csv`);
+            
+            document.body.appendChild(link);
+            link.click();
+            
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+        } catch (error) {
+            console.error('Download error:', error);
+            alert(error.response?.data?.message || 'Failed to download transactions.');
+        }
     };
 
     const handlePageChange = (event, value) => {
@@ -173,6 +195,7 @@ const HistoryPage = () => {
                 <Typography variant="h4" component="h1" sx={{ fontWeight: 700, flexGrow: 1 }}>
                     Transaction History
                 </Typography>
+                
                 <Button 
                     variant="outlined" 
                     startIcon={<FilterList />}
@@ -181,11 +204,22 @@ const HistoryPage = () => {
                 >
                     {showFilters ? 'Hide Filters' : 'Filters'}
                 </Button>
+
+                {/* ✅ NEW: Download Button - Only for Vendors */}
+                {user && user.role === 'Vendor' && (
+                    <Button 
+                        variant="contained" 
+                        startIcon={<Download />}
+                        onClick={handleDownloadTransactions}
+                        size="small"
+                        color="success"
+                        sx={{ ml: 1 }}
+                    >
+                        Download CSV
+                    </Button>
+                )}
             </Box>
 
-            {/* ============================================
-                ✅ UX IMPROVEMENT: Search and Filter Panel
-                ============================================ */}
             {showFilters && (
                 <Paper elevation={2} sx={{ p: 3, mb: 3, borderRadius: 2 }}>
                     <Typography variant="h6" gutterBottom>Search & Filter</Typography>
@@ -223,10 +257,6 @@ const HistoryPage = () => {
                             </FormControl>
                         </Grid>
                         
-                        {/* ============================================
-                            ✅ FIX: Changed back to datetime-local for time precision
-                            Allows filtering like "12 Oct, 10:15 AM"
-                            ============================================ */}
                         <Grid item xs={12} sm={6}>
                             <TextField
                                 label="From Date & Time"
@@ -272,9 +302,6 @@ const HistoryPage = () => {
                 </Paper>
             )}
 
-            {/* ============================================
-                ✅ UX IMPROVEMENT: Transaction count display
-                ============================================ */}
             <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
                     {totalTransactions > 0 ? `Showing ${transactions.length} of ${totalTransactions} transactions` : 'No transactions found'}
@@ -296,7 +323,6 @@ const HistoryPage = () => {
                         transactions.map((tx, index) => (
                             <React.Fragment key={tx.id}>
                                 {(() => {
-                                    // Determine Transaction Type
                                     const isTopUp = (tx.senderId === tx.receiverId) || (tx.senderUserId === 'FINANCE_TOPUP');
                                     const isSender = tx.senderUserId === user.userId;
                                     const isDebit = isSender && !isTopUp;
@@ -404,9 +430,6 @@ const HistoryPage = () => {
                 </List>
             </Paper>
 
-            {/* ============================================
-                ✅ UX IMPROVEMENT: Pagination Controls
-                ============================================ */}
             {totalPages > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
                     <Pagination 

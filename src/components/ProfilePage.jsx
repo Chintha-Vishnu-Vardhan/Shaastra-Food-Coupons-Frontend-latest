@@ -59,7 +59,7 @@ const ProfilePage = () => {
     setLoading(true);
     setMessage('');
     try {
-      const response = await api.post('/api/auth/forgot-spin-otp');
+      const response = await api.post('/api/auth/forgot-spin-otp',{ id: user.userId });
       setMessage(response.data.message || 'OTP sent to your email!');
       setStep(2);
     } catch (error) {
@@ -71,10 +71,11 @@ const ProfilePage = () => {
     }
   };
 
-  // ✅ FIX 2: Proper Reset Handler with Validation
+  // ✅ IMPROVED ERROR HANDLING:
   const handleResetSpin = async (e) => {
     e.preventDefault();
     
+    // Frontend validation
     if (!otp || otp.length !== 6) {
       setMessage('Please enter a valid 6-digit OTP');
       return;
@@ -98,11 +99,12 @@ const ProfilePage = () => {
       
       setTimeout(() => {
         handleClose();
+        // Optionally refresh the page or update user state
       }, 2000);
     } catch (error) {
       const errMsg = error.response?.data?.message || 'S-Pin reset failed';
       setMessage(errMsg);
-      console.error('S-Pin Reset Error:', error);
+      console.error('S-Pin Reset Error:', error.response?.data || error);
     } finally {
       setLoading(false);
     }
