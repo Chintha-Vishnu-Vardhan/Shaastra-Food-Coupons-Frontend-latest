@@ -9,48 +9,70 @@ import {
     Button,
     Box,
     Link,
-    IconButton, // --- 1. NEW IMPORT ---
-    InputAdornment // --- 2. NEW IMPORT ---
+    IconButton,
+    InputAdornment,
+    Alert,
+    CircularProgress
 } from '@mui/material';
-import Visibility from '@mui/icons-material/Visibility'; // --- 3. NEW IMPORT ---
-import VisibilityOff from '@mui/icons-material/VisibilityOff'; // --- 4. NEW IMPORT ---
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
     const [userId, setUserId] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    // --- 5. NEW STATE AND HANDLERS ---
     const [showPassword, setShowPassword] = useState(false);
     const handleClickShowPassword = () => setShowPassword((show) => !show);
     const handleMouseDownPassword = (event) => {
         event.preventDefault();
     };
-    // --- END NEW ---
 
     const handleLogin = async (e) => {
         e.preventDefault();
-        setError(''); 
+        setError('');
+        setLoading(true);
+        
+        // ✅ FIX: Better validation
+        if (!userId.trim() || !password) {
+            setError('Please enter both User ID and Password');
+            setLoading(false);
+            return;
+        }
+        
+        console.log('🔐 Attempting login for:', userId.trim().toUpperCase());
+        
         try {
-            await login(userId, password);
+            await login(userId.trim(), password);
+            console.log('✅ Login successful, redirecting...');
             navigate('/dashboard');
-
         } catch (errorMessage) {
-            console.error("LoginPage: login error caught:", errorMessage); 
-            setError(errorMessage || 'Login failed. Please check credentials.');
+            console.error('❌ Login failed:', errorMessage);
+            setError(errorMessage || 'Login failed. Please check your credentials.');
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
         <Container component="main" maxWidth="xs" sx={{ mt: 8 }}>
             <Card sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: 2 }}>
-                <Typography component="h1" variant="h5">
+                <Typography component="h1" variant="h5" gutterBottom>
                     Shaastra Wallet Login
                 </Typography>
-                <Box component="form" onSubmit={handleLogin} sx={{ mt: 1 }}>
+                
+                {/* ✅ FIX: Better error display */}
+                {error && (
+                    <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+                        {error}
+                    </Alert>
+                )}
+                
+                <Box component="form" onSubmit={handleLogin} sx={{ mt: 1, width: '100%' }}>
                     <TextField
                         margin="normal"
                         required
@@ -62,19 +84,22 @@ const LoginPage = () => {
                         autoFocus
                         value={userId}
                         onChange={(e) => setUserId(e.target.value)}
+                        disabled={loading}
+                        placeholder="e.g., CE23B005"
+                        helperText="Enter your roll number (case-insensitive)"
                     />
                     <TextField
-                        // --- 6. MODIFIED TEXTFIELD ---
                         margin="normal"
                         required
                         fullWidth
                         name="password"
                         label="Password"
-                        type={showPassword ? 'text' : 'password'} // Toggle type
+                        type={showPassword ? 'text' : 'password'}
                         id="password"
                         autoComplete="current-password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        disabled={loading}
                         InputProps={{
                           endAdornment: (
                             <InputAdornment position="end">
@@ -83,28 +108,23 @@ const LoginPage = () => {
                                 onClick={handleClickShowPassword}
                                 onMouseDown={handleMouseDownPassword}
                                 edge="end"
+                                disabled={loading}
                               >
                                 {showPassword ? <VisibilityOff /> : <Visibility />}
                               </IconButton>
                             </InputAdornment>
                           ),
                         }}
-                        // --- END MODIFICATION ---
                     />
-
-                    {error && (
-                        <Typography color="error" align="center" variant="body2" sx={{ mt: 2 }}>
-                            {error}
-                        </Typography>
-                    )}
 
                     <Button
                         type="submit"
                         fullWidth
                         variant="contained"
                         sx={{ mt: 3, mb: 2 }}
+                        disabled={loading}
                     >
-                        Login
+                        {loading ? <CircularProgress size={24} /> : 'Login'}
                     </Button>
 
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -115,6 +135,13 @@ const LoginPage = () => {
                             {"Don't have an account? Register"}
                         </Link>
                     </Box>
+                </Box>
+                
+                {/* ✅ FIX: Debug info (remove in production) */}
+                <Box sx={{ mt: 2, p: 1, bgcolor: 'grey.100', borderRadius: 1, width: '100%' }}>
+                    <Typography variant="caption" color="text.secondary">
+                        🔧 Debug: API URL = {process.env.REACT_APP_API_URL || 'http://localhost:5000'}
+                    </Typography>
                 </Box>
             </Card>
         </Container>
