@@ -6,6 +6,9 @@ import {
     Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel, Grid,
     InputAdornment,IconButton
 } from '@mui/material';
+import {
+    Warning // ✅ ADD THIS
+} from '@mui/icons-material';
 import { Link } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { io } from 'socket.io-client';
@@ -25,6 +28,8 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 // ✅ NEW IMPORT
 import TransactionStatus from './TransactionStatus';
+import ResetBalancesModal from './ResetBalancesModal';
+
 
 // Responsive Modal Style
 const modalStyle = {
@@ -104,7 +109,7 @@ const DashboardPage = () => {
     const [sPin, setSPin] = useState('');
     const [pendingTransaction, setPendingTransaction] = useState(null);
     const [showSPin, setShowSPin] = useState(false);
-
+    const [resetModalOpen, setResetModalOpen] = useState(false);
     // Modal Handlers
     const handleOpen = () => setOpen(true);
     const handleClose = () => { setOpen(false); setMessage(''); setReceiverId(''); setAmount(''); setIsScanning(false); };
@@ -149,7 +154,27 @@ const DashboardPage = () => {
     const handleMouseDownSPin = (event) => {
         event.preventDefault();
     };
+    // ✅ ADD THESE HANDLERS:
+    // ============================================
+    const handleResetModalOpen = () => {
+        setResetModalOpen(true);
+    };
 
+    const handleResetModalClose = () => {
+        setResetModalOpen(false);
+    };
+
+    const handleResetSuccess = (result) => {
+        enqueueSnackbar(
+            `✅ Successfully reset ${result.usersWithBalance} users' balances. Total: ₹${result.totalAmountReset}`,
+            { 
+                variant: 'success',
+                autoHideDuration: 7000
+            }
+        );
+        fetchHistory(); // Refresh transaction history
+        window.location.reload(); // Refresh to show updated balances
+    };
     // Data Fetching
 // ============================================
 // ✅ FIX: Handle both old and new API response formats
@@ -449,6 +474,19 @@ const DashboardPage = () => {
                  {user.department === 'Finance' && user.role === 'Core' && (
                      <Grid item xs={6} sm={4}><Button component={Link} to="/vendor-management" variant="outlined" startIcon={<ReceiptIcon />} fullWidth>Vendor Management</Button></Grid>
                  )}
+                {user.department === 'Finance' && user.role === 'Core' && (
+                    <Grid item xs={6} sm={4}>
+                        <Button 
+                            variant="contained" 
+                            color="warning"
+                            startIcon={<Warning />} 
+                            onClick={handleResetModalOpen}
+                            fullWidth
+                        >
+                            Reset Balances
+                        </Button>
+                    </Grid>
+                )}                 
             </Grid>
 
             {/* Recent Transactions */}
@@ -738,6 +776,15 @@ const DashboardPage = () => {
 
 
             <Button variant="outlined" color="error" onClick={handleLogout} sx={{ mt: 4 }} fullWidth>Logout</Button>
+
+            {/* ============================================
+                ✅ RESET BALANCES MODAL
+                ============================================ */}
+            <ResetBalancesModal
+                open={resetModalOpen}
+                onClose={handleResetModalClose}
+                onSuccess={handleResetSuccess}
+            />
         </Container>
     );
 };

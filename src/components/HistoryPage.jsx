@@ -31,6 +31,7 @@ import {
     ArrowBack,
     Search,
     FilterList,
+    Warning,
     Download // ✅ NEW IMPORT
 } from '@mui/icons-material';
 import api from '../api';
@@ -326,6 +327,7 @@ const HistoryPage = () => {
                                     const isTopUp = (tx.senderId === tx.receiverId) || (tx.senderUserId === 'FINANCE_TOPUP');
                                     const isSender = tx.senderUserId === user.userId;
                                     const isDebit = isSender && !isTopUp;
+                                    const isAdminReset = tx.type === 'ADMIN_RESET' || tx.receiverUserId === 'ADMIN_RESET';
 
                                     let primaryText = '';
                                     let secondaryText = '';
@@ -333,7 +335,16 @@ const HistoryPage = () => {
                                     let avatarColor = '';
                                     let amountColor = '';
 
-                                    if (isTopUp) {
+                                    // ============================================
+                                    // ✅ HANDLE ADMIN RESET DISPLAY
+                                    // ============================================
+                                    if (isAdminReset) {
+                                        primaryText = 'Balance Reset by Admin';
+                                        secondaryText = tx.metadata?.reason || 'Balance reset to ₹0.00';
+                                        IconComponent = Warning;
+                                        avatarColor = '#ff9800'; // Orange
+                                        amountColor = '#ed6c02'; // Warning color
+                                    } else if (isTopUp) {
                                         primaryText = 'Wallet Top-Up';
                                         secondaryText = 'Credit added to wallet';
                                         IconComponent = AddCard;
@@ -380,6 +391,20 @@ const HistoryPage = () => {
                                                                 }} 
                                                             />
                                                         )}
+                                                        {isAdminReset && (
+                                                            <Chip 
+                                                                label="RESET" 
+                                                                size="small" 
+                                                                icon={<Warning sx={{ fontSize: '0.8rem !important' }} />}
+                                                                sx={{ 
+                                                                    height: 20, 
+                                                                    fontSize: '0.65rem', 
+                                                                    fontWeight: 'bold',
+                                                                    bgcolor: '#fff3e0',
+                                                                    color: '#e65100'
+                                                                }} 
+                                                            />
+                                                        )}                             
                                                     </Box>
                                                 }
                                                 secondary={
